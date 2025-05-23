@@ -1,13 +1,9 @@
 
 import datetime as dt
 import pandas as pd
-import baltazar as btz
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
-from PIL import Image
 from streamlit_echarts import st_echarts
 
 """

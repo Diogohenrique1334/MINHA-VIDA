@@ -1,20 +1,10 @@
-import streamlit as st
 import pandas as pd
-import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
 from PIL import Image
 from streamlit_echarts import st_echarts
-import random
-import datetime as dt
-from sklearn.preprocessing import MinMaxScaler
-import numpy as np
-import ppscore as pps
-from sklearn.metrics import r2_score
-from sklearn.linear_model import LinearRegression
 from funcoes import ajustes_variaveis as fc
 from funcoes import graficos
-import re
+import streamlit as st
+import datetime as dt
 
 #Importando o dataset
 df = pd.read_excel('planilha da vida.xlsx')
