@@ -11,6 +11,12 @@ df = pd.read_excel('planilha da vida.xlsx')
 #Add atributos
 df['Dia da semana'] = df['Data'].dt.weekday.map({6:'Dom',0:'Seg',1:'Ter',2:'Qua',3:'Qui',4:'Sex',5:'Sab'})
 df['mes'] = df["Data"].dt.strftime('%m - %Y')
+# Criar uma coluna adicional para ordenação
+df['mes_ordenacao'] = pd.to_datetime(df['Data']).dt.to_period('M')
+# Definir a ordem das categorias da coluna 'mes'
+df['mes'] = pd.Categorical(df['mes'], categories=df.sort_values('mes_ordenacao')['mes'].unique(), ordered=True)
+# Remover a coluna de ordenação
+df = df.drop(columns=['mes_ordenacao'])
 df['Dia da semana'] = pd.Categorical(df['Dia da semana'], categories=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'], ordered=True)
 #variaveis
 categorias1 = df[

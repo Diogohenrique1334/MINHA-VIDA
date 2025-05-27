@@ -5,12 +5,20 @@ from funcoes import ajustes_variaveis as fc
 from funcoes import graficos
 import streamlit as st
 import datetime as dt
+import re
+import plotly.express as px
 
 #Importando o dataset
 df = pd.read_excel('planilha da vida.xlsx')
 #Add atributos
 df['Dia da semana'] = df['Data'].dt.weekday.map({6:'Dom',0:'Seg',1:'Ter',2:'Qua',3:'Qui',4:'Sex',5:'Sab'})
 df['mes'] = df["Data"].dt.strftime('%m - %Y')
+# Criar uma coluna adicional para ordenação
+df['mes_ordenacao'] = pd.to_datetime(df['Data']).dt.to_period('M')
+# Definir a ordem das categorias da coluna 'mes'
+df['mes'] = pd.Categorical(df['mes'], categories=df.sort_values('mes_ordenacao')['mes'].unique(), ordered=True)
+# Remover a coluna de ordenação
+df = df.drop(columns=['mes_ordenacao'])
 df['Dia da semana'] = pd.Categorical(df['Dia da semana'], categories=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'], ordered=True)
 #variaveis
 categorias1 = df[
@@ -84,13 +92,34 @@ if Hcategoria != []:
 
 #-------------------------------------graficos do app -------------------------------------
 
+df_filtrado['Horas dormindo'] = df_filtrado['Horas dormindo'].map(lambda x: x.total_seconds() / 3600)
+
+with st.container(border = True, height = 400 ):
+    col1, col2 = st.columns([2,5])
+
+    with col1.container(border = True, height = 350 ):
+
+        st.plotly_chart(px.violin(
+            df_filtrado, 
+            y="Horas dormindo", 
+            box=True,
+            color_discrete_sequence=['#18990b']
+            ))
+
+    with col2.container(border = True, height = 350 ):
+        st.plotly_chart(graficos(df_filtrado.pivot_table(index='Dia da semana',
+                    values='Horas dormindo',
+                    aggfunc='mean')['Horas dormindo']).grafico_barras('horas de sono por dia da semana'))
+
+    st.plotly_chart(graficos(df_filtrado.pivot_table(index='mes',
+                values='Horas dormindo',
+                aggfunc='mean')['Horas dormindo']).grafico_barras('horas de sono por mês'))
+    
+    st.plotly_chart(graficos(df_filtrado.pivot_table(index=df_filtrado.reset_index().Data.dt.isocalendar()['week'].values,
+                values='Horas dormindo',
+                aggfunc='mean')['Horas dormindo']).grafico_barras('horas de sono por semana'))
+    
 with st.container(border = True, height = 400):
     st.subheader('Horas de sono por dia')
-    #st_echarts(graficos(table=df_filtrado).grefico_calendario(categorias='Horas dormindo'), height="300px", key="echarts")
+    st_echarts(graficos(table=df_filtrado).grefico_calendario(categorias='Horas dormindo'), height="300px", key="echarts")
 
-#teste = df_filtrado['Horas dormindo'].dt.hour.melt(id_vars=['Data']).dropna(axis=0).pivot_table(index ='Data', values='value', aggfunc='sum')
-
-
-teste = df.Data.dt.month.values
-teste
-df_filtrado

@@ -11,6 +11,12 @@ df = pd.read_excel('planilha da vida.xlsx')
 #Add atributos
 df['Dia da semana'] = df['Data'].dt.weekday.map({6:'Dom',0:'Seg',1:'Ter',2:'Qua',3:'Qui',4:'Sex',5:'Sab'})
 df['mes'] = df["Data"].dt.strftime('%m - %Y')
+# Criar uma coluna adicional para ordenação
+df['mes_ordenacao'] = pd.to_datetime(df['Data']).dt.to_period('M')
+# Definir a ordem das categorias da coluna 'mes'
+df['mes'] = pd.Categorical(df['mes'], categories=df.sort_values('mes_ordenacao')['mes'].unique(), ordered=True)
+# Remover a coluna de ordenação
+df = df.drop(columns=['mes_ordenacao'])
 df['Dia da semana'] = pd.Categorical(df['Dia da semana'], categories=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'], ordered=True)
 #variaveis
 categorias1 = df[
@@ -84,40 +90,29 @@ if Hcategoria != []:
 
 #-------------------------------------graficos do app -------------------------------------
 
-with st.container(border = True, height = 560):
+with st.container(border = True, height = 480):
     st.subheader('Horas de sono por dia')
     col1, col2 = st.columns([2,5])
 
-    with col1.container(border = True, height = 470):
+    with col1.container(border = True, height = 390):
         st_echarts(graficos().liquid_fill((df_filtrado[['Nota do humor']].melt()['value'].dropna().mean()/10)),height="450px")
 
-    with col2.container(border = True, height = 470):
-        st.plotly_chart(
-            graficos(table=df_filtrado).aderencia_mes(
-                categoria_x=df_filtrado['Dia da semana'],
-                categorias='Nota do humor', 
-                titulo='Humor médio por dia da semana'),
-            height = "200px"
-            )
+    with col2.container(border = True, height = 390):
+        st.plotly_chart(graficos(df_filtrado.pivot_table(index='Dia da semana',
+               values='Nota do humor',
+               aggfunc='mean')['Nota do humor']).grafico_barras('horas de sono por dia da semana'))
     
 
-    with st.container(border = True, height = 450):
-        st.plotly_chart(
-                graficos(table=df_filtrado).aderencia_mes(
-                    categoria_x=df_filtrado.reset_index().Data.dt.month.values,
-                    categorias='Nota do humor', 
-                    titulo='Humor médio por mês'),
-                height = 300
-                )
+    with st.container(border = True, height = 390):
+        st.plotly_chart(graficos(df_filtrado.pivot_table(index=df_filtrado.reset_index().Data.dt.month.values,
+               values='Nota do humor',
+               aggfunc='mean')['Nota do humor']).grafico_barras('horas de sono por mês'))
         
-    with st.container(border = True, height = 450):
-        st.plotly_chart(
-                graficos(table=df_filtrado).aderencia_mes(
-                    categoria_x=df_filtrado.reset_index().Data.dt.isocalendar()['week'].values,
-                    categorias='Nota do humor', 
-                    titulo='Humor médio por semana'),
-                height = 300
-                )
+        
+    with st.container(border = True, height = 390):
+        st.plotly_chart(graficos(df_filtrado.pivot_table(index=df_filtrado.reset_index().Data.dt.isocalendar()['week'].values,
+               values='Nota do humor',
+               aggfunc='mean')['Nota do humor']).grafico_barras('horas de sono por semana'))
         
 
 with st.container(border = True, height = 400):
