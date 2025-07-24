@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+banco.db
+alimentar_banco_planilha.py
+limpar_banco.py
+*.ipynb
+myenv/
