@@ -5,7 +5,16 @@ from sqlalchemy.orm import declarative_base
 import datetime
 
 # Renomeei 'db' para 'engine' para ficar mais claro o que é
-engine = create_engine("sqlite:///banco.db", echo=False) # 'echo=False' para um log mais limpo
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # Carrega as variáveis do arquivo .env (para testes locais)
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("A variável de ambiente DATABASE_URL não foi definida.")
+
+engine = create_engine(DATABASE_URL, echo=False) # 'echo=False' para um log mais limpo
 
 Base = declarative_base()
 
