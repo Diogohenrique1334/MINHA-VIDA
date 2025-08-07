@@ -194,7 +194,7 @@ async def handle_webhook(request: Request):
             with pegar_sessao() as session:
                 # Buscar registros com base no fuso horário do Brasil
                 registro_hoje = session.query(Minha_vida).filter(
-                    func.date(Minha_vida.data.astimezone(FUSO_BRASIL)) == hoje_brasil,
+                    func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == hoje_brasil,
                     Minha_vida.user_phone_number == sender_phone
                 ).first()
 
@@ -209,7 +209,7 @@ async def handle_webhook(request: Request):
                         session.add(novo_registro)
                         session.commit()
                         registro_hoje = session.query(Minha_vida).filter(
-                            func.date(Minha_vida.data.astimezone(FUSO_BRASIL)) == hoje_brasil,
+                            func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == hoje_brasil,
                             Minha_vida.user_phone_number == sender_phone
                         ).first()
                     send_top_level_menu(sender_phone)
