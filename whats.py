@@ -3,7 +3,7 @@ import requests
 import json
 import datetime
 from fastapi import FastAPI, Request, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, cast, Date
 import traceback
 from dotenv import load_dotenv
 import os
@@ -20,7 +20,7 @@ from dependencies import pegar_sessao
 
 app = FastAPI()
 
-# --- FUNÇÕES DE ENVIO DE MENSAGEM ---
+# --- FUNÇÕES DE ENVIO DE MENSAGEM (sem alterações) ---
 def send_whatsapp_message(recipient_id, message_text):
     print(f"Tentando enviar '{message_text}' para {recipient_id}")
     url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/messages"
@@ -48,31 +48,19 @@ def send_list_message(recipient_id, header_text, body_text, button_text, section
     print(f"Tentando enviar lista para {recipient_id}")
     url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-    
-    # Corrigindo a estrutura do payload
     data = {
         "messaging_product": "whatsapp",
         "to": recipient_id,
         "type": "interactive",
         "interactive": {
             "type": "list",
-            "header": {
-                "type": "text",
-                "text": header_text[:60]  # Limite de 60 caracteres
-            },
-            "body": {
-                "text": body_text[:1024]   # Limite de 1024 caracteres
-            },
-            "action": {
-                "button": button_text[:20],  # Limite de 20 caracteres
-                "sections": sections  # Já deve ser uma lista de seções
-            }
+            "header": {"type": "text", "text": header_text},
+            "body": {"text": body_text},
+            "action": {"button": button_text, "sections": sections}
         }
     }
-    
     try:
         response = requests.post(url, headers=headers, data=json.dumps(data))
-        print(f"Status: {response.status_code}, Resposta: {response.text}")  # Log adicional
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"--- ERRO AO ENVIAR LISTA: {e.response.text if e.response else e} ---")
@@ -111,50 +99,28 @@ def send_top_level_menu(sender_phone):
 def send_dynamic_menu(sender_phone, session, registro_hoje, category):
     """Cria e envia um menu de lista dinâmico para uma categoria específica."""
     topicos_dict = TOPICOS_SIM_NAO if category == 'habitos' else TOPICOS_TEXTO
-    header_text = "Hábitos" if category == 'habitos' else "Métricas"
+    header_text = "Hábitos (Sim/Não)" if category == 'habitos' else "Métricas (Notas/Horas)"
     
     rows = []
     for key, value in topicos_dict.items():
-        resposta = getattr(registro_hoje, value['coluna'], None)
-        coluna_nome = value['coluna'].replace('_', ' ').title()
+        resposta = getattr(registro_hoje, value['coluna'])
         
         if resposta is None:
             status_emoji = "⬜️"
-            description = "Pendente"
+            description = "Toque para responder"
         else:
             if category == 'habitos':
                 status_emoji = "✅" if resposta else "❌"
-                description = f"Resposta: {'Sim' if resposta else 'Não'}"
-            else:
-                status_emoji = "⏰" if 'hora' in key else "📊"
-                if isinstance(resposta, datetime.datetime):
-                    description = f"Resposta: {resposta.strftime('%H:%M')}"
-                else:
-                    description = f"Resposta: {resposta}"
+                description = f"Sua resposta: {'Sim' if resposta else 'Não'}"
+            else: # Métricas
+                status_emoji = "🕒" if 'hora' in key else "📝"
+                description = f"Sua resposta: {resposta.strftime('%H:%M') if 'hora' in key else resposta}"
         
-        # Aplicar limites de caracteres
-        row_title = f"{status_emoji} {coluna_nome}"[:24]  # Limite de 24 caracteres
-        row_description = description[:72]  # Limite de 72 caracteres
-        
-        rows.append({
-            "id": f"ask_{key}",
-            "title": row_title,
-            "description": row_description
-        })
+        rows.append({"id": f"ask_{key}", "title": f"{status_emoji} {value['coluna']}", "description": description})
 
-    # Adicionar botão de voltar
-    rows.append({
-        "id": "show_menu_principal",
-        "title": "⬅️ Voltar"
-    })
-    
-    # Construir seção corretamente
-    sections = [{
-        "title": "Selecione um item"[:24],  # Limite de 24 caracteres
-        "rows": rows
-    }]
-    
-    send_list_message(sender_phone, "Diário Pessoal", header_text, "Opções", sections)
+    rows.append({"id": "show_menu_principal", "title": "⬅️ Voltar ao Menu Principal"})
+    sections = [{"title": "Selecione um item", "rows": rows}]
+    send_list_message(sender_phone, "Diário Pessoal", header_text, "Ver Opções", sections)
 
 
 # --- ENDPOINTS DA API ---
@@ -184,8 +150,9 @@ async def handle_webhook(request: Request):
             today = datetime.date.today()
             
             with pegar_sessao() as session:
+                # CORREÇÃO PARA POSTGRESQL: Usando cast(Minha_vida.data, Date)
                 registro_hoje = session.query(Minha_vida).filter(
-                    func.date(Minha_vida.data) == today,
+                    cast(Minha_vida.data, Date) == today,
                     Minha_vida.user_phone_number == sender_phone
                 ).first()
 
@@ -194,7 +161,7 @@ async def handle_webhook(request: Request):
                     if not registro_hoje:
                         session.add(Minha_vida(data=datetime.datetime.now(), user_phone_number=sender_phone))
                         session.commit()
-                        registro_hoje = session.query(Minha_vida).filter(func.date(Minha_vida.data) == today, Minha_vida.user_phone_number == sender_phone).first()
+                        registro_hoje = session.query(Minha_vida).filter(cast(Minha_vida.data, Date) == today, Minha_vida.user_phone_number == sender_phone).first()
                     send_top_level_menu(sender_phone)
                     return {"status": "ok"}
                 
