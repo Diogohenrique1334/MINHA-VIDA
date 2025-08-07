@@ -7,6 +7,7 @@ from sqlalchemy import func, cast, Date
 import traceback
 from dotenv import load_dotenv
 import os
+import pytz  # Adicione esta importação
 
 load_dotenv()
 
@@ -19,6 +20,18 @@ from models import Minha_vida
 from dependencies import pegar_sessao
 
 app = FastAPI()
+
+# Configuração do fuso horário do Brasil
+FUSO_BRASIL = pytz.timezone('America/Sao_Paulo')
+
+# --- FUNÇÕES AUXILIARES ---
+def agora_brasil():
+    """Retorna o datetime atual no fuso horário do Brasil"""
+    return datetime.datetime.now(FUSO_BRASIL)
+
+def data_hoje_brasil():
+    """Retorna a data atual no fuso horário do Brasil"""
+    return agora_brasil().date()
 
 # --- FUNÇÕES DE ENVIO DE MENSAGEM ---
 def send_whatsapp_message(recipient_id, message_text):
@@ -123,7 +136,9 @@ def send_dynamic_menu(sender_phone, session, registro_hoje, category):
             else:
                 status_emoji = "⏰" if 'hora' in key else "📊"
                 if isinstance(resposta, datetime.datetime):
-                    description = f"Resposta: {resposta.strftime('%H:%M')}"
+                    # Converta para fuso do Brasil antes de exibir
+                    resposta_brasil = resposta.astimezone(FUSO_BRASIL)
+                    description = f"Resposta: {resposta_brasil.strftime('%H:%M')}"
                 else:
                     description = f"Resposta: {resposta}"
         
@@ -172,20 +187,31 @@ async def handle_webhook(request: Request):
         if "messages" in value:
             message_info = value["messages"][0]
             sender_phone = message_info["from"]
-            today = datetime.date.today()
+            
+            # Usar data do Brasil
+            hoje_brasil = data_hoje_brasil()
             
             with pegar_sessao() as session:
+                # Buscar registros com base no fuso horário do Brasil
                 registro_hoje = session.query(Minha_vida).filter(
-                    func.date(Minha_vida.data) == today,
+                    func.date(Minha_vida.data.astimezone(FUSO_BRASIL)) == hoje_brasil,
                     Minha_vida.user_phone_number == sender_phone
                 ).first()
 
                 # 1. Iniciar a conversa
                 if message_info["type"] == "text" and message_info["text"]["body"].lower().strip() in ["iniciar", "oi", "diario", "menu"]:
                     if not registro_hoje:
-                        session.add(Minha_vida(data=datetime.datetime.now(), user_phone_number=sender_phone))
+                        # Usar datetime atual no fuso do Brasil
+                        novo_registro = Minha_vida(
+                            data=agora_brasil(),
+                            user_phone_number=sender_phone
+                        )
+                        session.add(novo_registro)
                         session.commit()
-                        registro_hoje = session.query(Minha_vida).filter(func.date(Minha_vida.data) == today, Minha_vida.user_phone_number == sender_phone).first()
+                        registro_hoje = session.query(Minha_vida).filter(
+                            func.date(Minha_vida.data.astimezone(FUSO_BRASIL)) == hoje_brasil,
+                            Minha_vida.user_phone_number == sender_phone
+                        ).first()
                     send_top_level_menu(sender_phone)
                     return {"status": "ok"}
                 
@@ -205,12 +231,20 @@ async def handle_webhook(request: Request):
                             
                             elif topic_info['tipo'] == 'hora':
                                 hora_obj = datetime.datetime.strptime(texto_usuario, '%H:%M').time()
-                                setattr(registro_hoje, coluna, datetime.datetime.combine(today, hora_obj))
+                                # Combinar com a data atual no Brasil
+                                data_completa = datetime.datetime.combine(hoje_brasil, hora_obj)
+                                # Adicionar fuso horário e converter para UTC
+                                data_completa_brasil = FUSO_BRASIL.localize(data_completa)
+                                setattr(registro_hoje, coluna, data_completa_brasil)
 
                             elif topic_info['tipo'] == 'hora_anterior':
                                 hora_obj = datetime.datetime.strptime(texto_usuario, '%H:%M').time()
-                                dia_anterior = registro_hoje.data.date() - datetime.timedelta(days=1)
-                                setattr(registro_hoje, coluna, datetime.datetime.combine(dia_anterior, hora_obj))
+                                # Usar a data de ontem no Brasil
+                                ontem_brasil = hoje_brasil - datetime.timedelta(days=1)
+                                data_completa = datetime.datetime.combine(ontem_brasil, hora_obj)
+                                # Adicionar fuso horário e converter para UTC
+                                data_completa_brasil = FUSO_BRASIL.localize(data_completa)
+                                setattr(registro_hoje, coluna, data_completa_brasil)
 
                             registro_hoje.status_conversa = None
                             session.commit()
@@ -249,9 +283,9 @@ async def handle_webhook(request: Request):
                             session.commit()
                             send_whatsapp_message(sender_phone, topic_info['texto'])
 
-                    # Resposta a um botão de Sim/Não - CORREÇÃO PRINCIPAL
+                    # Resposta a um botão de Sim/Não
                     elif payload.startswith('ans_'):
-                        print(f"Processando payload: {payload}")  # Log para depuração
+                        print(f"Processando payload: {payload}")
                         
                         # Encontra a posição do último underscore
                         last_underscore_index = payload.rfind('_')
@@ -262,19 +296,19 @@ async def handle_webhook(request: Request):
                         # Extrai o tópico (tudo entre 'ans_' e o último underscore)
                         topic_key = payload[4:last_underscore_index]
                         
-                        print(f"Tópico extraído: {topic_key}, Resposta: {resposta}")  # Log para depuração
+                        print(f"Tópico extraído: {topic_key}, Resposta: {resposta}")
                         
                         resposta_bool = (resposta == 'sim')
                         
                         if topic_key in TOPICOS_SIM_NAO:
-                            print(f"Tópico reconhecido: {topic_key}")  # Log para depuração
+                            print(f"Tópico reconhecido: {topic_key}")
                             coluna = TOPICOS_SIM_NAO[topic_key]['coluna']
                             setattr(registro_hoje, coluna, resposta_bool)
                             session.commit()
                             send_whatsapp_message(sender_phone, "Anotado! ✅")
                             send_dynamic_menu(sender_phone, session, registro_hoje, 'habitos')
                         else:
-                            print(f"Tópico não reconhecido: {topic_key}")  # Log para depuração
+                            print(f"Tópico não reconhecido: {topic_key}")
                             print(f"Tópicos disponíveis: {list(TOPICOS_SIM_NAO.keys())}")
                         
     except Exception as e:
