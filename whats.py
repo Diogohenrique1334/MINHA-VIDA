@@ -96,21 +96,21 @@ def send_list_message(recipient_id, header_text, body_text, button_text, section
 # --- LÓGICA DA CONVERSA ---
 
 TOPICOS_SIM_NAO = {
-    'academia': {'coluna': 'Academia', 'texto': 'Você foi à academia {dia}?'},
-    'leitura': {'coluna': 'Leitura', 'texto': 'E sobre leitura, você praticou {dia}?'},
-    'estudar': {'coluna': 'Estudar', 'texto': 'Reservou um tempo para os estudos {dia}?'},
-    'alimentacao_saudavel': {'coluna': 'Alimentação_saudavel', 'texto': 'Sua alimentação foi saudável {dia}?'},
-    'consumo_de_agua': {'coluna': 'Consumo_de_agua', 'texto': 'Bebeu água o suficiente {dia}?'},
-    'secreto': {'coluna': 'secreto', 'texto': 'Fumou {dia}?'},
-    'exercicio_aerobico': {'coluna': 'Exercício_aerobico', 'texto': 'Praticou atividade física {dia}?'},
-    'atividade_sexual': {'coluna': 'Atividade_sexual', 'texto': 'Fez sexo {dia}?'}
+    'academia': {'coluna': 'Academia', 'texto': 'Você foi à academia {dia}?', 'titulo': 'Academia'},
+    'leitura': {'coluna': 'Leitura', 'texto': 'E sobre leitura, você praticou {dia}?', 'titulo': 'Leitura'},
+    'estudar': {'coluna': 'Estudar', 'texto': 'Reservou um tempo para os estudos {dia}?', 'titulo': 'Estudar'},
+    'alimentacao_saudavel': {'coluna': 'Alimentação_saudavel', 'texto': 'Sua alimentação foi saudável {dia}?', 'titulo': 'Alimentação'},
+    'consumo_de_agua': {'coluna': 'Consumo_de_agua', 'texto': 'Bebeu água o suficiente {dia}?', 'titulo': 'Água'},
+    'secreto': {'coluna': 'secreto', 'texto': 'Fumou {dia}?', 'titulo': 'Secreto'},
+    'exercicio_aerobico': {'coluna': 'Exercício_aerobico', 'texto': 'Praticou atividade física {dia}?', 'titulo': 'Exercício'},
+    'atividade_sexual': {'coluna': 'Atividade_sexual', 'texto': 'Fez sexo {dia}?', 'titulo': 'Sexo'}
 }
 
 TOPICOS_TEXTO = {
-    'nota_humor_inicio': {'coluna': 'nota_humor', 'texto': 'Qual sua nota de humor ao acordar {dia}? (de 0 a 10)', 'tipo': 'nota'},
-    'hora_acordei': {'coluna': 'data_hora_acordei', 'texto': 'Beleza. E que horas você acordou {dia}? (ex: 07:30)', 'tipo': 'hora'},
-    'hora_dormir': {'coluna': 'data_hora_dormi', 'texto': 'Entendido. E que horas você foi dormir na noite anterior? (ex: 23:30)', 'tipo': 'hora_anterior'},
-    'nota_humor_fim': {'coluna': 'Nota_humor_fim_dia', 'texto': 'Para finalizar, qual sua nota de humor ao ir dormir {dia}? (de 0 a 10)', 'tipo': 'nota'}
+    'nota_humor_inicio': {'coluna': 'nota_humor', 'texto': 'Qual sua nota de humor ao acordar {dia}? (de 0 a 10)', 'tipo': 'nota', 'titulo': 'Humor Início'},
+    'hora_acordei': {'coluna': 'data_hora_acordei', 'texto': 'Beleza. E que horas você acordou {dia}? (ex: 07:30)', 'tipo': 'hora', 'titulo': 'Hora Acordar'},
+    'hora_dormir': {'coluna': 'data_hora_dormi', 'texto': 'Entendido. E que horas você foi dormir na noite anterior? (ex: 23:30)', 'tipo': 'hora_anterior', 'titulo': 'Hora Dormir'},
+    'nota_humor_fim': {'coluna': 'Nota_humor_fim_dia', 'texto': 'Para finalizar, qual sua nota de humor ao ir dormir {dia}? (de 0 a 10)', 'tipo': 'nota', 'titulo': 'Humor Fim'}
 }
 
 def send_top_level_menu(sender_phone):
@@ -131,17 +131,8 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     rows = []
     for key, value in topicos_dict.items():
         resposta = getattr(registro, value['coluna'], None)
-        coluna_nome = value['coluna'].replace('_', ' ').title()
-        
-        #Encurtar nomes longos de colunas
-        if coluna_nome == "Alimentação saudavel":
-            coluna_nome = "Alimentação"
-        elif coluna_nome == "Consumo de agua":
-            coluna_nome = "Água"
-        elif coluna_nome == "Exercício aerobico":
-            coluna_nome = "Exercício"
-        elif coluna_nome == "Atividade sexual":
-            coluna_nome = "Sexo"
+        # Usar título curto em vez do nome da coluna
+        coluna_nome = value['titulo']
         
         if resposta is None:
             status_emoji = "⬜️"
@@ -159,8 +150,14 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
                     description = f"Resposta: {resposta}"
         
         # Garantir que o título não ultrapasse 24 caracteres
-        row_title = f"{status_emoji} {coluna_nome}"[:24]
-        row_description = description[:72]
+        row_title = f"{status_emoji} {coluna_nome}"
+        if len(row_title) > 24:
+            row_title = row_title[:21] + "..."
+        
+        # Garantir que a descrição não ultrapasse 72 caracteres
+        row_description = description
+        if len(row_description) > 72:
+            row_description = row_description[:69] + "..."
         
         rows.append({
             "id": f"ask_{key}_{dia}",
@@ -171,7 +168,7 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     # Botão de voltar com título mais curto
     rows.append({
         "id": f"show_menu_principal_{dia}",
-        "title": "⬅️ Voltar"  # Título mais curto
+        "title": "⬅️ Voltar"
     })
     
     # Título da seção mais curto
