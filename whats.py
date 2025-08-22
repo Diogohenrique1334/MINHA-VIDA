@@ -7,7 +7,7 @@ from sqlalchemy import func, cast, Date
 import traceback
 from dotenv import load_dotenv
 import os
-import pytz  # Adicione esta importação
+import pytz
 
 load_dotenv()
 
@@ -32,6 +32,10 @@ def agora_brasil():
 def data_hoje_brasil():
     """Retorna a data atual no fuso horário do Brasil"""
     return agora_brasil().date()
+
+def data_ontem_brasil():
+    """Retorna a data de ontem no fuso horário do Brasil"""
+    return data_hoje_brasil() - datetime.timedelta(days=1)
 
 # --- FUNÇÕES DE ENVIO DE MENSAGEM ---
 def send_whatsapp_message(recipient_id, message_text):
@@ -92,38 +96,41 @@ def send_list_message(recipient_id, header_text, body_text, button_text, section
 # --- LÓGICA DA CONVERSA ---
 
 TOPICOS_SIM_NAO = {
-    'academia': {'coluna': 'Academia', 'texto': 'Você foi à academia hoje?'},
-    'leitura': {'coluna': 'Leitura', 'texto': 'E sobre leitura, você praticou hoje?'},
-    'estudar': {'coluna': 'Estudar', 'texto': 'Reservou um tempo para os estudos?'},
-    'alimentacao_saudavel': {'coluna': 'Alimentação_saudavel', 'texto': 'Sua alimentação foi saudável?'},
-    'consumo_de_agua': {'coluna': 'Consumo_de_agua', 'texto': 'Bebeu água o suficiente hoje?'},
-    'secreto': {'coluna': 'secreto', 'texto': 'Fumou hoje?'},
-    'exercicio_aerobico': {'coluna': 'Exercício_aerobico', 'texto': 'Praticou atividade física hoje?'},
-    'atividade_sexual': {'coluna': 'Atividade_sexual', 'texto': 'Fez sexo hoje?'}
+    'academia': {'coluna': 'Academia', 'texto': 'Você foi à academia {dia}?'},
+    'leitura': {'coluna': 'Leitura', 'texto': 'E sobre leitura, você praticou {dia}?'},
+    'estudar': {'coluna': 'Estudar', 'texto': 'Reservou um tempo para os estudos {dia}?'},
+    'alimentacao_saudavel': {'coluna': 'Alimentação_saudavel', 'texto': 'Sua alimentação foi saudável {dia}?'},
+    'consumo_de_agua': {'coluna': 'Consumo_de_agua', 'texto': 'Bebeu água o suficiente {dia}?'},
+    'secreto': {'coluna': 'secreto', 'texto': 'Fumou {dia}?'},
+    'exercicio_aerobico': {'coluna': 'Exercício_aerobico', 'texto': 'Praticou atividade física {dia}?'},
+    'atividade_sexual': {'coluna': 'Atividade_sexual', 'texto': 'Fez sexo {dia}?'}
 }
 
 TOPICOS_TEXTO = {
-    'nota_humor_inicio': {'coluna': 'nota_humor', 'texto': 'Qual sua nota de humor ao acordar? (de 0 a 10)', 'tipo': 'nota'},
-    'hora_acordei': {'coluna': 'data_hora_acordei', 'texto': 'Beleza. E que horas você acordou hoje? (ex: 07:30)', 'tipo': 'hora'},
+    'nota_humor_inicio': {'coluna': 'nota_humor', 'texto': 'Qual sua nota de humor ao acordar {dia}? (de 0 a 10)', 'tipo': 'nota'},
+    'hora_acordei': {'coluna': 'data_hora_acordei', 'texto': 'Beleza. E que horas você acordou {dia}? (ex: 07:30)', 'tipo': 'hora'},
     'hora_dormir': {'coluna': 'data_hora_dormi', 'texto': 'Entendido. E que horas você foi dormir na noite anterior? (ex: 23:30)', 'tipo': 'hora_anterior'},
-    'nota_humor_fim': {'coluna': 'Nota_humor_fim_dia', 'texto': 'Para finalizar, qual sua nota de humor ao ir dormir? (de 0 a 10)', 'tipo': 'nota'}
+    'nota_humor_fim': {'coluna': 'Nota_humor_fim_dia', 'texto': 'Para finalizar, qual sua nota de humor ao ir dormir {dia}? (de 0 a 10)', 'tipo': 'nota'}
 }
 
 def send_top_level_menu(sender_phone):
-    texto = "Olá! Bem-vindo(a) ao seu diário. 😄\n\nO que você gostaria de registrar agora?"
+    texto = "Olá! Bem-vindo(a) ao seu diário. 😄\n\nPara qual dia você gostaria de registrar informações?"
     botoes = [
-        {"title": "💪 Registrar Hábitos", "payload": "show_menu_habitos"},
-        {"title": "📊 Registrar Métricas", "payload": "show_menu_metricas"}
+        {"title": "📅 Hoje", "payload": "escolher_dia_hoje"},
+        {"title": "📅 Ontem", "payload": "escolher_dia_ontem"}
     ]
     send_button_message(sender_phone, texto, botoes)
 
-def send_dynamic_menu(sender_phone, session, registro_hoje, category):
+def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     topicos_dict = TOPICOS_SIM_NAO if category == 'habitos' else TOPICOS_TEXTO
     header_text = "Hábitos" if category == 'habitos' else "Métricas"
     
+    # Ajustar texto do dia
+    dia_texto = "hoje" if dia == "hoje" else "ontem"
+    
     rows = []
     for key, value in topicos_dict.items():
-        resposta = getattr(registro_hoje, value['coluna'], None)
+        resposta = getattr(registro, value['coluna'], None)
         coluna_nome = value['coluna'].replace('_', ' ').title()
         
         if resposta is None:
@@ -136,7 +143,6 @@ def send_dynamic_menu(sender_phone, session, registro_hoje, category):
             else:
                 status_emoji = "⏰" if 'hora' in key else "📊"
                 if isinstance(resposta, datetime.datetime):
-                    # Converta para fuso do Brasil antes de exibir
                     resposta_brasil = resposta.astimezone(FUSO_BRASIL)
                     description = f"Resposta: {resposta_brasil.strftime('%H:%M')}"
                 else:
@@ -146,22 +152,45 @@ def send_dynamic_menu(sender_phone, session, registro_hoje, category):
         row_description = description[:72]
         
         rows.append({
-            "id": f"ask_{key}",
+            "id": f"ask_{key}_{dia}",
             "title": row_title,
             "description": row_description
         })
 
     rows.append({
-        "id": "show_menu_principal",
-        "title": "⬅️ Voltar"
+        "id": f"show_menu_principal_{dia}",
+        "title": "⬅️ Voltar ao Menu Principal"
     })
     
     sections = [{
-        "title": "Selecione um item"[:24],
+        "title": f"Selecione um item - {dia_texto.capitalize()}"[:24],
         "rows": rows
     }]
     
-    send_list_message(sender_phone, "Diário Pessoal", header_text, "Opções", sections)
+    send_list_message(sender_phone, f"Diário Pessoal - {dia_texto.capitalize()}", header_text, "Opções", sections)
+
+def get_registro_por_data(session, data, sender_phone):
+    """Busca ou cria um registro para uma data específica"""
+    registro = session.query(Minha_vida).filter(
+        func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == data,
+        Minha_vida.user_phone_number == sender_phone
+    ).first()
+
+    if not registro:
+        # Criar registro com a data especificada
+        data_inicio = FUSO_BRASIL.localize(datetime.datetime.combine(data, datetime.time(0, 0)))
+        novo_registro = Minha_vida(
+            data=data_inicio,
+            user_phone_number=sender_phone
+        )
+        session.add(novo_registro)
+        session.commit()
+        registro = session.query(Minha_vida).filter(
+            func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == data,
+            Minha_vida.user_phone_number == sender_phone
+        ).first()
+    
+    return registro
 
 # --- ENDPOINTS DA API ---
 @app.get("/")
@@ -188,128 +217,173 @@ async def handle_webhook(request: Request):
             message_info = value["messages"][0]
             sender_phone = message_info["from"]
             
-            # Usar data do Brasil
-            hoje_brasil = data_hoje_brasil()
-            
             with pegar_sessao() as session:
-                # Buscar registros com base no fuso horário do Brasil
-                registro_hoje = session.query(Minha_vida).filter(
-                    func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == hoje_brasil,
-                    Minha_vida.user_phone_number == sender_phone
-                ).first()
-
                 # 1. Iniciar a conversa
                 if message_info["type"] == "text" and message_info["text"]["body"].lower().strip() in ["iniciar", "oi", "diario", "menu"]:
-                    if not registro_hoje:
-                        # Usar datetime atual no fuso do Brasil
-                        novo_registro = Minha_vida(
-                            data=agora_brasil(),
-                            user_phone_number=sender_phone
-                        )
-                        session.add(novo_registro)
-                        session.commit()
-                        registro_hoje = session.query(Minha_vida).filter(
-                            func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == hoje_brasil,
-                            Minha_vida.user_phone_number == sender_phone
-                        ).first()
                     send_top_level_menu(sender_phone)
                     return {"status": "ok"}
                 
-                # 2. Processar respostas de texto (para Métricas)
-                if message_info["type"] == "text" and registro_hoje and registro_hoje.status_conversa:
-                    texto_usuario = message_info["text"]["body"]
-                    topic_key = registro_hoje.status_conversa.replace('aguardando_', '')
-                    
-                    if topic_key in TOPICOS_TEXTO:
-                        topic_info = TOPICOS_TEXTO[topic_key]
-                        coluna = topic_info['coluna']
-                        try:
-                            if topic_info['tipo'] == 'nota':
-                                nota = float(texto_usuario.replace(',', '.'))
-                                if not (0 <= nota <= 10): raise ValueError("Nota fora do intervalo")
-                                setattr(registro_hoje, coluna, nota)
-                            
-                            elif topic_info['tipo'] == 'hora':
-                                hora_obj = datetime.datetime.strptime(texto_usuario, '%H:%M').time()
-                                # Combinar com a data atual no Brasil
-                                data_completa = datetime.datetime.combine(hoje_brasil, hora_obj)
-                                # Adicionar fuso horário e converter para UTC
-                                data_completa_brasil = FUSO_BRASIL.localize(data_completa)
-                                setattr(registro_hoje, coluna, data_completa_brasil)
-
-                            elif topic_info['tipo'] == 'hora_anterior':
-                                hora_obj = datetime.datetime.strptime(texto_usuario, '%H:%M').time()
-                                # Usar a data de ontem no Brasil
-                                ontem_brasil = hoje_brasil - datetime.timedelta(days=1)
-                                data_completa = datetime.datetime.combine(ontem_brasil, hora_obj)
-                                # Adicionar fuso horário e converter para UTC
-                                data_completa_brasil = FUSO_BRASIL.localize(data_completa)
-                                setattr(registro_hoje, coluna, data_completa_brasil)
-
-                            registro_hoje.status_conversa = None
-                            session.commit()
-                            send_whatsapp_message(sender_phone, "Anotado! ✅")
-                            send_dynamic_menu(sender_phone, session, registro_hoje, 'metricas')
-                        except ValueError:
-                            send_whatsapp_message(sender_phone, "Resposta inválida. Por favor, tente novamente.")
-                            send_whatsapp_message(sender_phone, topic_info['texto'])
-
-                # 3. Processar respostas interativas (Menus, Listas e Botões)
+                # 2. Processar respostas interativas (Menus, Listas e Botões)
                 elif message_info["type"] == "interactive":
-                    if not registro_hoje:
-                        send_whatsapp_message(sender_phone, "Ops, não encontrei seu registro de hoje. Tente mandar 'iniciar' primeiro.")
-                        return {"status": "ok"}
-
                     interactive_type = message_info["interactive"]["type"]
                     payload = message_info["interactive"][interactive_type]["id"]
 
+                    # Escolha do dia (hoje/ontem)
+                    if payload.startswith('escolher_dia_'):
+                        dia_escolhido = payload.replace('escolher_dia_', '')
+                        
+                        if dia_escolhido == 'hoje':
+                            data_referencia = data_hoje_brasil()
+                        else:  # ontem
+                            data_referencia = data_ontem_brasil()
+                        
+                        registro = get_registro_por_data(session, data_referencia, sender_phone)
+                        
+                        texto = f"Você selecionou {dia_escolhido}. O que você gostaria de registrar?"
+                        botoes = [
+                            {"title": "💪 Registrar Hábitos", "payload": f"show_menu_habitos_{dia_escolhido}"},
+                            {"title": "📊 Registrar Métricas", "payload": f"show_menu_metricas_{dia_escolhido}"}
+                        ]
+                        send_button_message(sender_phone, texto, botoes)
+                        return {"status": "ok"}
+
                     # Navegação entre menus
                     if payload.startswith('show_menu_'):
-                        category = payload.replace('show_menu_', '')
-                        if category == 'principal': send_top_level_menu(sender_phone)
-                        else: send_dynamic_menu(sender_phone, session, registro_hoje, category)
+                        parts = payload.split('_')
+                        category = parts[2]
+                        dia_escolhido = parts[3]
+                        
+                        if dia_escolhido == 'hoje':
+                            data_referencia = data_hoje_brasil()
+                        else:  # ontem
+                            data_referencia = data_ontem_brasil()
+                        
+                        registro = get_registro_por_data(session, data_referencia, sender_phone)
+                        
+                        if category == 'principal':
+                            send_top_level_menu(sender_phone)
+                        else:
+                            send_dynamic_menu(sender_phone, session, registro, category, dia_escolhido)
                         return {"status": "ok"}
 
                     # Seleção de um item na lista para responder
                     if payload.startswith('ask_'):
-                        topic_key = payload.replace('ask_', '')
+                        parts = payload.split('_')
+                        topic_key = parts[1]
+                        dia_escolhido = parts[2]
+                        
+                        if dia_escolhido == 'hoje':
+                            data_referencia = data_hoje_brasil()
+                        else:  # ontem
+                            data_referencia = data_ontem_brasil()
+                        
+                        registro = get_registro_por_data(session, data_referencia, sender_phone)
+                        
                         if topic_key in TOPICOS_SIM_NAO:
                             topic_info = TOPICOS_SIM_NAO[topic_key]
-                            botoes = [{"title": "✅ Sim", "payload": f"ans_{topic_key}_sim"}, {"title": "❌ Não", "payload": f"ans_{topic_key}_nao"}]
-                            send_button_message(sender_phone, topic_info['texto'], botoes)
+                            # Ajustar texto com o dia
+                            texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
+                            botoes = [
+                                {"title": "✅ Sim", "payload": f"ans_{topic_key}_{dia_escolhido}_sim"},
+                                {"title": "❌ Não", "payload": f"ans_{topic_key}_{dia_escolhido}_nao"}
+                            ]
+                            send_button_message(sender_phone, texto_pergunta, botoes)
                         elif topic_key in TOPICOS_TEXTO:
                             topic_info = TOPICOS_TEXTO[topic_key]
-                            registro_hoje.status_conversa = f"aguardando_{topic_key}"
+                            # Ajustar texto com o dia
+                            texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
+                            registro.status_conversa = f"aguardando_{topic_key}_{dia_escolhido}"
                             session.commit()
-                            send_whatsapp_message(sender_phone, topic_info['texto'])
+                            send_whatsapp_message(sender_phone, texto_pergunta)
 
                     # Resposta a um botão de Sim/Não
                     elif payload.startswith('ans_'):
+                        parts = payload.split('_')
+                        topic_key = parts[1]
+                        dia_escolhido = parts[2]
+                        resposta = parts[3]
+                        
+                        if dia_escolhido == 'hoje':
+                            data_referencia = data_hoje_brasil()
+                        else:  # ontem
+                            data_referencia = data_ontem_brasil()
+                        
+                        registro = get_registro_por_data(session, data_referencia, sender_phone)
+                        
                         print(f"Processando payload: {payload}")
-                        
-                        # Encontra a posição do último underscore
-                        last_underscore_index = payload.rfind('_')
-                        
-                        # Extrai a resposta (última parte após o último underscore)
-                        resposta = payload[last_underscore_index + 1:]
-                        
-                        # Extrai o tópico (tudo entre 'ans_' e o último underscore)
-                        topic_key = payload[4:last_underscore_index]
-                        
-                        print(f"Tópico extraído: {topic_key}, Resposta: {resposta}")
+                        print(f"Tópico extraído: {topic_key}, Dia: {dia_escolhido}, Resposta: {resposta}")
                         
                         resposta_bool = (resposta == 'sim')
                         
                         if topic_key in TOPICOS_SIM_NAO:
                             print(f"Tópico reconhecido: {topic_key}")
                             coluna = TOPICOS_SIM_NAO[topic_key]['coluna']
-                            setattr(registro_hoje, coluna, resposta_bool)
+                            setattr(registro, coluna, resposta_bool)
                             session.commit()
                             send_whatsapp_message(sender_phone, "Anotado! ✅")
-                            send_dynamic_menu(sender_phone, session, registro_hoje, 'habitos')
+                            send_dynamic_menu(sender_phone, session, registro, 'habitos', dia_escolhido)
                         else:
                             print(f"Tópico não reconhecido: {topic_key}")
                             print(f"Tópicos disponíveis: {list(TOPICOS_SIM_NAO.keys())}")
+                
+                # 3. Processar respostas de texto (para Métricas)
+                elif message_info["type"] == "text":
+                    # Verificar se há um registro com status_conversa
+                    registro = session.query(Minha_vida).filter(
+                        Minha_vida.user_phone_number == sender_phone,
+                        Minha_vida.status_conversa.isnot(None)
+                    ).order_by(Minha_vida.data.desc()).first()
+                    
+                    if registro and registro.status_conversa:
+                        texto_usuario = message_info["text"]["body"]
+                        status_parts = registro.status_conversa.split('_')
+                        topic_key = status_parts[1]
+                        dia_escolhido = status_parts[2]
+                        
+                        if dia_escolhido == 'hoje':
+                            data_referencia = data_hoje_brasil()
+                        else:  # ontem
+                            data_referencia = data_ontem_brasil()
+                        
+                        # Recarregar o registro específico para o dia
+                        registro = get_registro_por_data(session, data_referencia, sender_phone)
+                        
+                        if topic_key in TOPICOS_TEXTO:
+                            topic_info = TOPICOS_TEXTO[topic_key]
+                            coluna = topic_info['coluna']
+                            try:
+                                if topic_info['tipo'] == 'nota':
+                                    nota = float(texto_usuario.replace(',', '.'))
+                                    if not (0 <= nota <= 10): 
+                                        raise ValueError("Nota fora do intervalo")
+                                    setattr(registro, coluna, nota)
+                                
+                                elif topic_info['tipo'] == 'hora':
+                                    hora_obj = datetime.datetime.strptime(texto_usuario, '%H:%M').time()
+                                    # Combinar com a data de referência
+                                    data_completa = datetime.datetime.combine(data_referencia, hora_obj)
+                                    # Adicionar fuso horário
+                                    data_completa_brasil = FUSO_BRASIL.localize(data_completa)
+                                    setattr(registro, coluna, data_completa_brasil)
+
+                                elif topic_info['tipo'] == 'hora_anterior':
+                                    hora_obj = datetime.datetime.strptime(texto_usuario, '%H:%M').time()
+                                    # Para hora de dormir, sempre é o dia anterior à data de referência
+                                    data_anterior = data_referencia - datetime.timedelta(days=1)
+                                    data_completa = datetime.datetime.combine(data_anterior, hora_obj)
+                                    # Adicionar fuso horário
+                                    data_completa_brasil = FUSO_BRASIL.localize(data_completa)
+                                    setattr(registro, coluna, data_completa_brasil)
+
+                                registro.status_conversa = None
+                                session.commit()
+                                send_whatsapp_message(sender_phone, "Anotado! ✅")
+                                send_dynamic_menu(sender_phone, session, registro, 'metricas', dia_escolhido)
+                            except ValueError:
+                                send_whatsapp_message(sender_phone, "Resposta inválida. Por favor, tente novamente.")
+                                # Reenviar a pergunta
+                                texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
+                                send_whatsapp_message(sender_phone, texto_pergunta)
                         
     except Exception as e:
         print(f"!!!!!!!!!! ERRO CRÍTICO NO WEBHOOK !!!!!!!!!!!")
