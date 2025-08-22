@@ -134,18 +134,18 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
         coluna_nome = value['coluna'].replace('_', ' ').title()
         
         # Encurtar nomes longos de colunas
-        if coluna_nome == "Alimentação Saudavel":
-            coluna_nome = "Alimentação"
-        elif coluna_nome == "Consumo De Agua":
-            coluna_nome = "Água"
-        elif coluna_nome == "Exercício Aerobico":
-            coluna_nome = "Exercício"
-        elif coluna_nome == "Atividade Sexual":
-            coluna_nome = "Sexo"
-        elif coluna_nome == "Diario E Fixacao":
-            coluna_nome = "Diário"
-        elif coluna_nome == "Atencao Plena":
-            coluna_nome = "Atenção"
+        # if coluna_nome == "Alimentação Saudavel":
+        #     coluna_nome = "Alimentação"
+        # elif coluna_nome == "Consumo De Agua":
+        #     coluna_nome = "Água"
+        # elif coluna_nome == "Exercício Aerobico":
+        #     coluna_nome = "Exercício"
+        # elif coluna_nome == "Atividade Sexual":
+        #     coluna_nome = "Sexo"
+        # elif coluna_nome == "Diario E Fixacao":
+        #     coluna_nome = "Diário"
+        # elif coluna_nome == "Atencao Plena":
+        #     coluna_nome = "Atenção"
         
         if resposta is None:
             status_emoji = "⬜️"
@@ -187,7 +187,7 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     }]
     
     send_list_message(sender_phone, f"Diário - {dia_texto.capitalize()}", header_text, "Opções", sections)
-    
+
 def get_registro_por_data(session, data, sender_phone):
     """Busca ou cria um registro para uma data específica"""
     registro = session.query(Minha_vida).filter(
