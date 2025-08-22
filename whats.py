@@ -54,7 +54,16 @@ def send_button_message(recipient_id, question_text, buttons):
     url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
     action_buttons = [{"type": "reply", "reply": {"id": b["payload"], "title": b["title"]}} for b in buttons]
-    data = { "messaging_product": "whatsapp", "to": recipient_id, "type": "interactive", "interactive": {"type": "button", "body": {"text": question_text}, "action": {"buttons": action_buttons}}}
+    data = {
+        "messaging_product": "whatsapp",
+        "to": recipient_id,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": question_text},
+            "action": {"buttons": action_buttons}
+        }
+    }
     try:
         response = requests.post(url, headers=headers, data=json.dumps(data))
         response.raise_for_status()
@@ -230,7 +239,7 @@ async def handle_webhook(request: Request):
             sender_phone = message_info["from"]
             
             with pegar_sessao() as session:
-                # 1. Iniciar a conversa
+                # 1. Iniciar a conversa (mensagem de texto simples)
                 if message_info["type"] == "text" and message_info["text"]["body"].lower().strip() in ["iniciar", "oi", "diario", "menu"]:
                     send_top_level_menu(sender_phone)
                     return {"status": "ok"}
@@ -262,8 +271,11 @@ async def handle_webhook(request: Request):
                     # Navegação entre menus
                     if payload.startswith('show_menu_'):
                         parts = payload.split('_')
-                        category = parts[2]
-                        dia_escolhido = parts[3]
+                        # payload exemplo: show_menu_habitos_hoje
+                        # parts = ['show','menu','habitos','hoje']
+                        # category é parts[2], dia parts[3]
+                        category = parts[2] if len(parts) > 2 else 'principal'
+                        dia_escolhido = parts[3] if len(parts) > 3 else 'hoje'
                         
                         if dia_escolhido == 'hoje':
                             data_referencia = data_hoje_brasil()
@@ -278,22 +290,25 @@ async def handle_webhook(request: Request):
                             send_dynamic_menu(sender_phone, session, registro, category, dia_escolhido)
                         return {"status": "ok"}
 
-                    # Seleção de um item na lista para responder
+                    # Seleção de um item na lista para responder (preserva underscores no topic_key)
                     if payload.startswith('ask_'):
-                        parts = payload.split('_')
-                        topic_key = parts[1]
-                        dia_escolhido = parts[2]
-                        
+                        # rest ex: "atividade_sexual_ontem"
+                        rest = payload[len('ask_'):]
+                        try:
+                            topic_key, dia_escolhido = rest.rsplit('_', 1)
+                        except ValueError:
+                            topic_key = rest
+                            dia_escolhido = 'hoje'
+
                         if dia_escolhido == 'hoje':
                             data_referencia = data_hoje_brasil()
-                        else:  # ontem
+                        else:
                             data_referencia = data_ontem_brasil()
-                        
+
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
-                        
+
                         if topic_key in TOPICOS_SIM_NAO:
                             topic_info = TOPICOS_SIM_NAO[topic_key]
-                            # Ajustar texto com o dia
                             texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
                             botoes = [
                                 {"title": "✅ Sim", "payload": f"ans_{topic_key}_{dia_escolhido}_sim"},
@@ -302,31 +317,34 @@ async def handle_webhook(request: Request):
                             send_button_message(sender_phone, texto_pergunta, botoes)
                         elif topic_key in TOPICOS_TEXTO:
                             topic_info = TOPICOS_TEXTO[topic_key]
-                            # Ajustar texto com o dia
                             texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
                             registro.status_conversa = f"aguardando_{topic_key}_{dia_escolhido}"
                             session.commit()
                             send_whatsapp_message(sender_phone, texto_pergunta)
+                        return {"status": "ok"}
 
-                    # Resposta a um botão de Sim/Não
+                    # Resposta a um botão de Sim/Não (preserva underscores no topic_key)
                     elif payload.startswith('ans_'):
-                        parts = payload.split('_')
-                        topic_key = parts[1]
-                        dia_escolhido = parts[2]
-                        resposta = parts[3]
-                        
+                        # rest ex: "atividade_sexual_ontem_sim"
+                        rest = payload[len('ans_'):]
+                        try:
+                            topic_key, dia_escolhido, resposta = rest.rsplit('_', 2)
+                        except ValueError:
+                            print(f"Payload 'ans_' inesperado: {payload}")
+                            return {"status": "ok"}
+
                         if dia_escolhido == 'hoje':
                             data_referencia = data_hoje_brasil()
-                        else:  # ontem
+                        else:
                             data_referencia = data_ontem_brasil()
-                        
+
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
-                        
+
                         print(f"Processando payload: {payload}")
                         print(f"Tópico extraído: {topic_key}, Dia: {dia_escolhido}, Resposta: {resposta}")
-                        
+
                         resposta_bool = (resposta == 'sim')
-                        
+
                         if topic_key in TOPICOS_SIM_NAO:
                             print(f"Tópico reconhecido: {topic_key}")
                             coluna = TOPICOS_SIM_NAO[topic_key]['coluna']
@@ -337,6 +355,7 @@ async def handle_webhook(request: Request):
                         else:
                             print(f"Tópico não reconhecido: {topic_key}")
                             print(f"Tópicos disponíveis: {list(TOPICOS_SIM_NAO.keys())}")
+                        return {"status": "ok"}
                 
                 # 3. Processar respostas de texto (para Métricas)
                 elif message_info["type"] == "text":
@@ -348,18 +367,27 @@ async def handle_webhook(request: Request):
                     
                     if registro and registro.status_conversa:
                         texto_usuario = message_info["text"]["body"]
-                        status_parts = registro.status_conversa.split('_')
-                        topic_key = status_parts[1]
-                        dia_escolhido = status_parts[2]
-                        
+                        # remover prefixo "aguardando_" e separar topic + dia corretamente
+                        status = registro.status_conversa
+                        if status.startswith("aguardando_"):
+                            rest = status[len("aguardando_"):]  # ex: "hora_acordei_hoje"
+                            try:
+                                topic_key, dia_escolhido = rest.rsplit('_', 1)
+                            except ValueError:
+                                topic_key = rest
+                                dia_escolhido = 'hoje'
+                        else:
+                            topic_key = None
+                            dia_escolhido = 'hoje'
+
                         if dia_escolhido == 'hoje':
                             data_referencia = data_hoje_brasil()
-                        else:  # ontem
+                        else:
                             data_referencia = data_ontem_brasil()
-                        
+
                         # Recarregar o registro específico para o dia
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
-                        
+
                         if topic_key in TOPICOS_TEXTO:
                             topic_info = TOPICOS_TEXTO[topic_key]
                             coluna = topic_info['coluna']
@@ -396,7 +424,7 @@ async def handle_webhook(request: Request):
                                 # Reenviar a pergunta
                                 texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
                                 send_whatsapp_message(sender_phone, texto_pergunta)
-                        
+                        return {"status": "ok"}
     except Exception as e:
         print(f"!!!!!!!!!! ERRO CRÍTICO NO WEBHOOK !!!!!!!!!!!")
         print(f"Erro: {e}")
