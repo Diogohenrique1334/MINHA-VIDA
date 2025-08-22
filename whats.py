@@ -133,6 +133,20 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
         resposta = getattr(registro, value['coluna'], None)
         coluna_nome = value['coluna'].replace('_', ' ').title()
         
+        # Encurtar nomes longos de colunas
+        if coluna_nome == "Alimentação Saudavel":
+            coluna_nome = "Alimentação"
+        elif coluna_nome == "Consumo De Agua":
+            coluna_nome = "Água"
+        elif coluna_nome == "Exercício Aerobico":
+            coluna_nome = "Exercício"
+        elif coluna_nome == "Atividade Sexual":
+            coluna_nome = "Sexo"
+        elif coluna_nome == "Diario E Fixacao":
+            coluna_nome = "Diário"
+        elif coluna_nome == "Atencao Plena":
+            coluna_nome = "Atenção"
+        
         if resposta is None:
             status_emoji = "⬜️"
             description = "Pendente"
@@ -148,6 +162,7 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
                 else:
                     description = f"Resposta: {resposta}"
         
+        # Garantir que o título não ultrapasse 24 caracteres
         row_title = f"{status_emoji} {coluna_nome}"[:24]
         row_description = description[:72]
         
@@ -157,18 +172,22 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
             "description": row_description
         })
 
+    # Botão de voltar com título mais curto
     rows.append({
         "id": f"show_menu_principal_{dia}",
-        "title": "⬅️ Voltar ao Menu Principal"
+        "title": "⬅️ Voltar"  # Título mais curto
     })
     
+    # Título da seção mais curto
+    section_title = f"{dia_texto.capitalize()}"[:24]
+    
     sections = [{
-        "title": f"Selecione um item - {dia_texto.capitalize()}"[:24],
+        "title": section_title,
         "rows": rows
     }]
     
-    send_list_message(sender_phone, f"Diário Pessoal - {dia_texto.capitalize()}", header_text, "Opções", sections)
-
+    send_list_message(sender_phone, f"Diário - {dia_texto.capitalize()}", header_text, "Opções", sections)
+    
 def get_registro_por_data(session, data, sender_phone):
     """Busca ou cria um registro para uma data específica"""
     registro = session.query(Minha_vida).filter(
