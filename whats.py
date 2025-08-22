@@ -133,19 +133,15 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
         resposta = getattr(registro, value['coluna'], None)
         coluna_nome = value['coluna'].replace('_', ' ').title()
         
-        # Encurtar nomes longos de colunas
-        # if coluna_nome == "Alimentação Saudavel":
-        #     coluna_nome = "Alimentação"
-        # elif coluna_nome == "Consumo De Agua":
-        #     coluna_nome = "Água"
-        # elif coluna_nome == "Exercício Aerobico":
-        #     coluna_nome = "Exercício"
-        # elif coluna_nome == "Atividade Sexual":
-        #     coluna_nome = "Sexo"
-        # elif coluna_nome == "Diario E Fixacao":
-        #     coluna_nome = "Diário"
-        # elif coluna_nome == "Atencao Plena":
-        #     coluna_nome = "Atenção"
+        #Encurtar nomes longos de colunas
+        if coluna_nome == "Alimentação saudavel":
+            coluna_nome = "Alimentação"
+        elif coluna_nome == "Consumo de agua":
+            coluna_nome = "Água"
+        elif coluna_nome == "Exercício aerobico":
+            coluna_nome = "Exercício"
+        elif coluna_nome == "Atividade sexual":
+            coluna_nome = "Sexo"
         
         if resposta is None:
             status_emoji = "⬜️"
