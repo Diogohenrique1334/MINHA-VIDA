@@ -308,14 +308,26 @@ async def handle_webhook(request: Request):
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
 
                         if topic_key in TOPICOS_SIM_NAO:
+                            # ALTERAÇÃO PRINCIPAL: Para hábitos, marcar automaticamente como True
                             topic_info = TOPICOS_SIM_NAO[topic_key]
-                            texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
-                            botoes = [
-                                {"title": "✅ Sim", "payload": f"ans_{topic_key}_{dia_escolhido}_sim"},
-                                {"title": "❌ Não", "payload": f"ans_{topic_key}_{dia_escolhido}_nao"}
-                            ]
-                            send_button_message(sender_phone, texto_pergunta, botoes)
+                            coluna = topic_info['coluna']
+                            
+                            # Verificar o estado atual para fazer toggle
+                            estado_atual = getattr(registro, coluna)
+                            novo_estado = not estado_atual if estado_atual is not None else True
+                            
+                            setattr(registro, coluna, novo_estado)
+                            session.commit()
+                            
+                            # Mensagem de confirmação
+                            acao = "marcada como feita" if novo_estado else "marcada como não feita"
+                            send_whatsapp_message(sender_phone, f"✅ Hábito {acao}!")
+                            
+                            # Atualizar o menu
+                            send_dynamic_menu(sender_phone, session, registro, 'habitos', dia_escolhido)
+                            
                         elif topic_key in TOPICOS_TEXTO:
+                            # Para métricas, manter o comportamento original
                             topic_info = TOPICOS_TEXTO[topic_key]
                             texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
                             registro.status_conversa = f"aguardando_{topic_key}_{dia_escolhido}"
@@ -323,39 +335,8 @@ async def handle_webhook(request: Request):
                             send_whatsapp_message(sender_phone, texto_pergunta)
                         return {"status": "ok"}
 
-                    # Resposta a um botão de Sim/Não (preserva underscores no topic_key)
-                    elif payload.startswith('ans_'):
-                        # rest ex: "atividade_sexual_ontem_sim"
-                        rest = payload[len('ans_'):]
-                        try:
-                            topic_key, dia_escolhido, resposta = rest.rsplit('_', 2)
-                        except ValueError:
-                            print(f"Payload 'ans_' inesperado: {payload}")
-                            return {"status": "ok"}
-
-                        if dia_escolhido == 'hoje':
-                            data_referencia = data_hoje_brasil()
-                        else:
-                            data_referencia = data_ontem_brasil()
-
-                        registro = get_registro_por_data(session, data_referencia, sender_phone)
-
-                        print(f"Processando payload: {payload}")
-                        print(f"Tópico extraído: {topic_key}, Dia: {dia_escolhido}, Resposta: {resposta}")
-
-                        resposta_bool = (resposta == 'sim')
-
-                        if topic_key in TOPICOS_SIM_NAO:
-                            print(f"Tópico reconhecido: {topic_key}")
-                            coluna = TOPICOS_SIM_NAO[topic_key]['coluna']
-                            setattr(registro, coluna, resposta_bool)
-                            session.commit()
-                            send_whatsapp_message(sender_phone, "Anotado! ✅")
-                            send_dynamic_menu(sender_phone, session, registro, 'habitos', dia_escolhido)
-                        else:
-                            print(f"Tópico não reconhecido: {topic_key}")
-                            print(f"Tópicos disponíveis: {list(TOPICOS_SIM_NAO.keys())}")
-                        return {"status": "ok"}
+                    # REMOVIDO: Não precisamos mais processar respostas 'ans_' para hábitos
+                    # pois agora os hábitos são marcados diretamente no 'ask_'
                 
                 # 3. Processar respostas de texto (para Métricas)
                 elif message_info["type"] == "text":
