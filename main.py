@@ -5,19 +5,93 @@ from funcoes import ajustes_variaveis as fc
 from funcoes import graficos
 import streamlit as st
 import datetime as dt
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+import os
+#from models import Minha_vida
+from dependencies import pegar_sessao
+import os
+import numpy as np
+load_dotenv()
 
 #Importando o dataset
-df = pd.read_excel('planilha da vida.xlsx')
-#Add atributos
-df['Dia da semana'] = df['Data'].dt.weekday.map({6:'Dom',0:'Seg',1:'Ter',2:'Qua',3:'Qui',4:'Sex',5:'Sab'})
-df['mes'] = df["Data"].dt.strftime('%m - %Y')
-# Criar uma coluna adicional para ordenação
-df['mes_ordenacao'] = pd.to_datetime(df['Data']).dt.to_period('M')
-# Definir a ordem das categorias da coluna 'mes'
+
+def carregar_dados():
+    """
+    Conecta-se ao banco de dados Neon e carrega a tabela 'minha_vida' em um DataFrame.
+    """
+    db_url = os.getenv("DATABASE_URL")
+
+    engine = create_engine(db_url)
+    # Carrega toda a tabela em um DataFrame
+    df = pd.read_sql_table('minha_vida', engine, index_col='id')
+    print("Dados carregados do banco de dados com sucesso.")
+
+df = pd.read_sql_table('minha_vida', create_engine(os.getenv("DATABASE_URL")), index_col='id')
+
+usuario = {'5511959536031':"Diogo",'5511991422452':"Michele"}
+
+Colunas_tratadas = {'data':'Data',
+                    'nota_humor':'Nota do humor',
+                    'Exercício_aerobico':'Exercício aeróbico',
+                    'Alimentação_saudavel':'Alimentação saudável',
+                    'Consumo_de_agua':'Consumo de água',
+                    'Atividade_sexual':'Atividade sexual',
+                    'Nota_humor_fim_dia':'Nota do humor fim do dia',
+                    
+                    'data_hora_acordei':'Hora que eu acordei',
+                    'data_hora_dormi':'Horario que eu fui dormir'
+                   }
+
+# Garante que a coluna 'data' é do tipo datetime e ajusta para o fuso horário correto
+df['data'] = pd.to_datetime(df['data'].dt.date)
+
+# Criação das colunas de data/hora a partir da coluna 'data'
+
+df['Dia da semana'] = df['data'].dt.weekday.map({6:'Dom',0:'Seg',1:'Ter',2:'Qua',3:'Qui',4:'Sex',5:'Sab'})
+df['mes'] = df["data"].dt.strftime('%m - %Y')
+df['mes_ordenacao'] = pd.to_datetime(df['data']).dt.to_period('M')
 df['mes'] = pd.Categorical(df['mes'], categories=df.sort_values('mes_ordenacao')['mes'].unique(), ordered=True)
-# Remover a coluna de ordenação
-df = df.drop(columns=['mes_ordenacao'])
+df = df.drop(columns=['mes_ordenacao','Diario_e_fixacao','Atencao_plena','status_conversa']).rename(columns = Colunas_tratadas)
 df['Dia da semana'] = pd.Categorical(df['Dia da semana'], categories=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'], ordered=True)
+df['user_phone_number'] = df['user_phone_number'].map(usuario).astype('category')
+
+
+# Converte colunas booleanas para 0 e 1 para cálculos
+for col in df.columns:
+    if df[col].dtype == 'object':
+        df[col] = df[col].astype('bool').astype(int)
+
+df.sort_values('Data', inplace=True)
+
+
+
+df = df[df['user_phone_number'] == 'Diogo']
+
+acordou = df[df['Hora que eu acordei'].dt.hour != 0].reset_index().reset_index()[['Hora que eu acordei','index']]
+dormiu = df[df['Hora que eu acordei'].dt.hour != 0].reset_index().reset_index()[['Horario que eu fui dormir','index']]
+
+tempo_sono = pd.DataFrame()
+
+for x in range(len(dormiu)-1):
+    
+    tempo_sono = pd.concat(
+        [pd.DataFrame({'chave':acordou['index'].loc[x+1],
+            "Horas dormindo":[acordou['Hora que eu acordei'].loc[x+1] - dormiu['Horario que eu fui dormir'].loc[x]]}),tempo_sono]
+    )
+
+tempo_sono.set_index('chave', inplace=True)
+
+tempo_sono = tempo_sono[~tempo_sono['Horas dormindo'].isnull()]['Horas dormindo'].map(
+    lambda x: ((x - dt.timedelta(days = int(str(x).split(" ")[0]))).total_seconds() / 60) / 60 if x != np.nan else x)
+
+
+
+df = df.reset_index().merge(right=tempo_sono,
+                        left_index=True, 
+                        right_index=True, 
+                        how='left').reset_index(drop = 'index').drop(columns = 'id')
+
 #variaveis
 categorias1 = df[
     [
@@ -38,7 +112,7 @@ Hiper_categoria = {'secreto':'Lazer', 'Estudar':'Evolução pessoal', 'Leitura':
     'Atividade sexual':'Lazer'}
 
 #Ajustes variáveis
-df = fc(fc(fc(df).tratamento_hora()).tempo_sono_n()).Humor()
+df = fc(df).Humor().rename(columns = {'Horas dormindo':'Tempo de sono'})
 #df = fc(df).tratamento_hora()
 
 #df = fc(df).tempo_sono_n()
@@ -49,7 +123,6 @@ imagem = Image.open("foto_diogo.jpg")
 #-----------------------------------Inicio do app---------------------------------------------
 
 st.set_page_config(layout="wide", page_title='Análise da vida')
-
 
 st.success("Análise da vida")
 
@@ -156,9 +229,9 @@ with st.container(border=True,height=540):
 with st.container(border=True, height=450):
     st.subheader('Correlação de pearson das minhas tarefas')
     st_echarts(graficos(table=df_filtrado).mapa_valor(categorias=categorias), height="500px")
-        
+
 
 with st.container(border=True, height=400):
     st.subheader('Atividades realizadas por dia')
-    st_echarts(graficos(table=df_filtrado).grefico_calendario(categorias=categorias), height="300px", key="echarts")
+    st_echarts(graficos(table=df_filtrado).grefico_calendario(categorias=categorias,ano_1=2025,ano_2=2026), height="300px", key="echarts")
 
