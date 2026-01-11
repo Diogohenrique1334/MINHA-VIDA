@@ -43,7 +43,7 @@ class ajustes_variaveis:
         
         table['Horario que eu fui dormir'] = \
         table['Horario que eu fui dormir'].fillna('00:00:00').map(
-        lambda x: (dt.datetime.strptime(str(x), '%H:%M:%S') + dt.timedelta(days = 1)) 
+        lambda x: (dt.datetime.strptime(str(x).split(' ')[1], '%H:%M:%S') + dt.timedelta(days = 1)) 
         if dt.datetime.strptime(str(x), '%H:%M:%S').hour in range(10)
         else (dt.datetime.strptime(str(x), '%H:%M:%S'))
         )
@@ -53,11 +53,11 @@ class ajustes_variaveis:
                                                 hours = x['Horario que eu fui dormir'].hour, 
                                                 minutes = x['Horario que eu fui dormir'].minute), axis=1)
         
-        table['Hora que eu acordei'] = table['Hora que eu acordei'].fillna('00:00:00').map(lambda x: dt.datetime.strptime(str(x),'%H:%M:%S'))
+#        table['Hora que eu acordei'] = table['Hora que eu acordei'].fillna('00:00:00').map(lambda x: dt.datetime.strptime(str(x).split(' ')[2],'%H:%M:%S'))
         
-        table['Hora que eu acordei'] = \
-        table.apply(lambda x: x['Data'] + dt.timedelta(hours = x['Hora que eu acordei'].hour, 
-                                                minutes = x['Hora que eu acordei'].minute), axis=1)
+#        table['Hora que eu acordei'] = \
+#        table.apply(lambda x: x['Data'] + dt.timedelta(hours = x['Hora que eu acordei'].hour, 
+#                                                minutes = x['Hora que eu acordei'].minute), axis=1)
         
         acordou = table[table['Hora que eu acordei'].dt.hour != 0].reset_index()[['Hora que eu acordei','index']]
         dormiu = table[table['Hora que eu acordei'].dt.hour != 0].reset_index()[['Horario que eu fui dormir','index']]
@@ -80,7 +80,6 @@ class ajustes_variaveis:
 
         return table
 
-
     def tempo_sono_n(self,table = None):
 
         if table is None:
@@ -96,7 +95,6 @@ class ajustes_variaveis:
         table['Tempo de sono'] = table.apply(lambda x: np.nan if pd.isna(x['Horas dormindo']) else x['Tempo de sono'], axis = 1)
 
         return table
-
 
     def Humor(self,table = None):
 
@@ -233,13 +231,13 @@ class graficos:
 
         return linha_tempo_aderencia
     
-    def grefico_calendario(self, categorias):
+    def grefico_calendario(self, categorias,ano_1,ano_2):
 
         datas = self.table[categorias].reset_index().melt(id_vars='Data').dropna(axis=0).pivot_table(index ='Data', values='value', aggfunc='sum')
 
         # Separar dados por ano
-        data_1 = [[str(index.date()), row['value']] for index, row in datas.iterrows() if index.year == 2024]
-        data_2 = [[str(index.date()), row['value']] for index, row in datas.iterrows() if index.year == 2025]
+        data_1 = [[str(index.date()), int(row['value'])] for index, row in datas.iterrows() if index.year == ano_1]
+        data_2 = [[str(index.date()), int(row['value'])] for index, row in datas.iterrows() if index.year == ano_2]
 
         option1 = {
             "tooltip": {"position": "top"},
@@ -254,7 +252,7 @@ class graficos:
             },
             "calendar": [
                 { # Calendário 2024
-                    "range": "2024",
+                    "range": str(ano_1),
                     "cellSize": ["auto", 14],
                     "top": "7%",
                     "splitLine": {"lineStyle": {"color": "#000000"}},
@@ -264,7 +262,7 @@ class graficos:
                     "yearLabel": {"color": "#cac2c2"}
                 },
                 { # Calendário 2025
-                    "range": "2025",
+                    "range": str(ano_2),
                     "cellSize": ["auto", 14],
                     "top": "50%",  # Posicionado abaixo do primeiro calendário
                     "splitLine": {"lineStyle": {"color": "#000000"}},
