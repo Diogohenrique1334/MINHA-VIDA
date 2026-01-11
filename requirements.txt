@@ -13,3 +13,5 @@ requests
 fastapi
 uvicorn
 pytz
+openpyxl
+
