@@ -194,7 +194,7 @@ with st.container(border=True,height=540):
                 categoria_x=df['Dia da semana'],
                 categorias=categorias,
                 titulo='Aderência acumulada por dia da semana'), 
-            height = "200px"
+            height = 400
         )
 
     with col2.container(border=True,height=450):
@@ -205,7 +205,7 @@ with st.container(border=True,height=540):
                     categoria_x=df['Horario que eu fui dormir'].dt.hour,
                     categorias=categorias,
                     titulo='Horario de dormir'),
-                height = "50px"
+                height = "50"
             )
 
         if right.button("Hora dispertar", use_container_width=True):
@@ -214,7 +214,7 @@ with st.container(border=True,height=540):
                     categoria_x=df['Hora que eu acordei'].dt.hour,
                     categorias=categorias,
                     titulo='Hora dispertar'),
-                height = "100px"
+                height = 100
             )
 
     with st.container(border = True, height = 350):
@@ -223,15 +223,15 @@ with st.container(border=True,height=540):
                 categoria_x=df.mes,
                 categorias=categorias,
                 titulo='Aderencia acumulada por mês'),
-            height = "320px"
+            height = 320
         )
 
 with st.container(border=True, height=450):
     st.subheader('Correlação de pearson das minhas tarefas')
-    st_echarts(graficos(table=df_filtrado).mapa_valor(categorias=categorias), height="500px")
+    st_echarts(graficos(table=df_filtrado).mapa_valor(categorias=categorias), height=500)
 
 
-with st.container(border=True, height=400):
+with st.container(border=True, height=600):
     st.subheader('Atividades realizadas por dia')
-    st_echarts(graficos(table=df_filtrado).grefico_calendario(categorias=categorias,ano_1=2025,ano_2=2026), height="300px", key="echarts")
+    st_echarts(graficos(table=df_filtrado).grefico_calendario(categorias=categorias,ano_1=2024,ano_2=2025,ano_3=2026), height=500, key="echarts")
 
