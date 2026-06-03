@@ -1,28 +1,24 @@
-# models.py - VERSÃO CORRIGIDA
-
 from sqlalchemy import create_engine, Column, Integer, Boolean, Float, DateTime, String, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 import datetime
-
-# Renomeei 'db' para 'engine' para ficar mais claro o que é
 import os
 from dotenv import load_dotenv
 
-load_dotenv() # Carrega as variáveis do arquivo .env (para testes locais)
+load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("A variável de ambiente DATABASE_URL não foi definida.")
 
-engine = create_engine(DATABASE_URL, echo=False) # 'echo=False' para um log mais limpo
+engine = create_engine(DATABASE_URL, echo=False)
 
 Base = declarative_base()
 
 class Minha_vida(Base):
     __tablename__ = "minha_vida"
-    id = Column("id", Integer, primary_key = True, autoincrement = True)
-    data = Column("data", DateTime, default=datetime.datetime.utcnow) # Usar datetime.utcnow é uma boa prática
-    nota_humor = Column("nota_humor", Float,nullable = True)
+    id = Column("id", Integer, primary_key=True, autoincrement=True)
+    data = Column("data", DateTime, default=datetime.datetime.utcnow)
+    nota_humor = Column("nota_humor", Float, nullable=True)
     secreto = Column("secreto", Boolean, nullable=True)
     Estudar = Column("Estudar", Boolean, nullable=True)
     Leitura = Column("Leitura", Boolean, nullable=True)
@@ -35,12 +31,11 @@ class Minha_vida(Base):
     Atividade_sexual = Column("Atividade_sexual", Boolean, nullable=True)
     data_hora_acordei = Column("data_hora_acordei", DateTime, nullable=True)
     data_hora_dormi = Column("data_hora_dormi", DateTime, nullable=True)
-    Nota_humor_fim_dia = Column("Nota_humor_fim_dia", Float,nullable = True)
+    Nota_humor_fim_dia = Column("Nota_humor_fim_dia", Float, nullable=True)
     status_conversa = Column(String, nullable=True)
     user_phone_number = Column(String, nullable=False)
 
     __table_args__ = (UniqueConstraint('user_phone_number', 'data', name='_user_date_uc'),)
-
 
     def __repr__(self):
         return f"<Minha_vida(id={self.id}, data={self.data})>"
