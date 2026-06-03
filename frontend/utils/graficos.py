@@ -118,142 +118,105 @@ def meia_rosca(data,tamanho = "300px"):
     }
     return st_echarts(options=options, height=tamanho)
 
-def grefico_calendario(df,
-#                        ano_1,
-                        ano_2,
-                        ano_3):
+def grefico_calendario(df, anos=None, tamanho=None, cores=None):
+    """
+    Heatmap de calendário ECharts. Anos detectados automaticamente se não informados.
 
-    # Tipos corretos
+    df     : DataFrame com colunas 'Data' (datetime) e 'value' (numeric)
+    anos   : lista de int com os anos a exibir. Se None, detecta pelos dados.
+    tamanho: altura do gráfico (ex: "500px"). Se None, calcula pelo nº de anos.
+    cores  : paleta do visualMap [cor_min, cor_max]. Default: ["#cac2c2", "#99251F"]
+    """
+    cores = cores or ["#cac2c2", "#99251F"]
+
+    df = df.copy()
     df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
     df['value'] = pd.to_numeric(df['value'], errors='coerce')
 
-    # Remove linhas inválidas e agrega por dia
     datas = (
-        df.dropna(subset=['Data'])  # mantém linhas com Data válida (valor pode ser NaN e virar None)
+        df.dropna(subset=['Data'])
         .pivot_table(index='Data', values='value', aggfunc='sum')
         .sort_index()
     )
 
-    # --- 2) Helpers para converter para tipos nativos/serializáveis ---
+    if anos is None:
+        anos = sorted(datas.index.year.unique().tolist()) if not datas.empty else []
+
+    if not anos:
+        return
+
     def _to_date_str(idx):
-        # ECharts (calendário) gosta de "YYYY-MM-DD"
         return idx.strftime("%Y-%m-%d")
 
     def _to_native_val(x):
-        # None para NaN/<NA>; int nativo para numéricos
-        if pd.isna(x):
-            return None  # ou 0, se preferir preencher vazio
-        return int(x)
+        return None if pd.isna(x) else int(x)
 
-    def _build_year(y: int):
-        out = []
+    def _build_year(y):
         if datas.empty:
-            return out
-        # Evita iterrows; usamos index + values e filtramos pelo ano
-        for idx, val in zip(datas.index, datas['value'].values):
-            if isinstance(idx, pd.Timestamp) and not pd.isna(idx) and idx.year == y:
-                out.append([_to_date_str(idx), _to_native_val(val)])
-        return out
+            return []
+        return [
+            [_to_date_str(idx), _to_native_val(val)]
+            for idx, val in zip(datas.index, datas['value'].values)
+            if isinstance(idx, pd.Timestamp) and not pd.isna(idx) and idx.year == y
+        ]
 
-    #data_1 = _build_year(ano_1)
-    data_2 = _build_year(ano_2)
-    data_3 = _build_year(ano_3)
+    n = len(anos)
+    # posição vertical: distribui os n calendários entre 5% e 95%
+    spacing = 90 / n
+    tops = [f"{5 + i * spacing:.0f}%" for i in range(n)]
 
-    # Max para o visualMap (float nativo; fallback quando NaN)
-    if datas.empty:
-        vmax_native = 1.0
-    else:
+    vmax_native = 1.0
+    if not datas.empty:
         vmax = pd.to_numeric(datas['value'], errors='coerce').max()
         vmax_native = float(vmax) if pd.notna(vmax) else 1.0
 
-    # --- 3) Opções do ECharts ---
-    option1 = {
+    option = {
         "tooltip": {"position": "top"},
         "visualMap": {
-            "min": 0,
-            "max": vmax_native,
-            "calculable": True,
-            "orient": "horizontal",
-            "left": "center",
-            # Use o esquema de cores padrão do ECharts via inRange
-            "inRange": {"color": ["#cac2c2", "#99251F"]},  # claro -> escuro
+            "min": 0, "max": vmax_native,
+            "calculable": True, "orient": "horizontal", "left": "center",
+            "inRange": {"color": cores},
         },
         "calendar": [
-            #{  # Calendário ano_1
-            #    "range": str(ano_1),
-            #    "cellSize": ["auto", 14],
-            #    "top": "7%",
-            #    "splitLine": {"lineStyle": {"color": "#000000"}},
-            #    "itemStyle": {"color": "#ffffff"},
-            #    "dayLabel": {"color": "#ffffff"},
-            #    "monthLabel": {"color": "#ffffff"},
-            #    "yearLabel": {"color": "#cac2c2"},
-            #},
-            {  # Calendário ano_2
-                "range": str(ano_2),
+            {
+                "range": str(ano),
                 "cellSize": ["auto", 14],
-                "top": "7%",
+                "top": tops[i],
                 "splitLine": {"lineStyle": {"color": "#000000"}},
                 "itemStyle": {"color": "#ffffff"},
                 "dayLabel": {"color": "#ffffff"},
                 "monthLabel": {"color": "#ffffff"},
                 "yearLabel": {"color": "#cac2c2"},
-            },
-            {  # Calendário ano_3
-                "range": str(ano_3),
-                "cellSize": ["auto", 14],
-                "top": "50%",
-                "splitLine": {"lineStyle": {"color": "#000000"}},
-                "itemStyle": {"color": "#ffffff"},
-                "dayLabel": {"color": "#ffffff"},
-                "monthLabel": {"color": "#ffffff"},
-                "yearLabel": {"color": "#cac2c2"},
-            },
+            }
+            for i, ano in enumerate(anos)
         ],
         "series": [
-        #    {
-        #        "type": "heatmap",
-        #        "coordinateSystem": "calendar",
-        #        "calendarIndex": 0,
-        #        "data": data_1,
-        #    },
             {
                 "type": "heatmap",
                 "coordinateSystem": "calendar",
-                "calendarIndex": 0,
-                "data": data_2,
-            },
-            {
-                "type": "heatmap",
-                "coordinateSystem": "calendar",
-                "calendarIndex": 1,
-                "data": data_3,
-            },
+                "calendarIndex": i,
+                "data": _build_year(ano),
+            }
+            for i, ano in enumerate(anos)
         ],
     }
 
-    # --- 4) Blindagem final contra tipos NumPy/Pandas no dicionário ---
+    if tamanho is None:
+        tamanho = f"{max(300, n * 175)}px"
+
     def to_native(obj):
-        from datetime import date, datetime
-        if isinstance(obj, (np.integer,)):  # np.int64 -> int
-            return int(obj)
-        if isinstance(obj, (np.floating,)):  # np.float64 -> float
-            return float(obj)
-        if isinstance(obj, (np.bool_,)):  # np.bool_ -> bool
-            return bool(obj)
-        if isinstance(obj, (pd.Timestamp, datetime)):  # datas -> string ISO
-            return obj.isoformat()
-        if obj is pd.NaT:
-            return None
-        if isinstance(obj, np.ndarray):
-            return [to_native(x) for x in obj.tolist()]
-        if isinstance(obj, (list, tuple, set)):
-            return [to_native(x) for x in obj]
-        if isinstance(obj, dict):
-            return {str(k): to_native(v) for k, v in obj.items()}
+        from datetime import datetime
+        if isinstance(obj, np.integer): return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.bool_): return bool(obj)
+        if isinstance(obj, (pd.Timestamp, datetime)): return obj.isoformat()
+        if obj is pd.NaT: return None
+        if isinstance(obj, np.ndarray): return [to_native(x) for x in obj.tolist()]
+        if isinstance(obj, (list, tuple, set)): return [to_native(x) for x in obj]
+        if isinstance(obj, dict): return {str(k): to_native(v) for k, v in obj.items()}
         return obj
 
-    return st_echarts(options=to_native(option1))
+    return st_echarts(options=to_native(option), height=tamanho)
 
 def mapa_brasil(dados_estados = None):
 

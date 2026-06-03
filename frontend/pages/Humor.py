@@ -79,6 +79,6 @@ with st.container(border=True, height=350):
 
 # ── Calendário ─────────────────────────────────────────────────────────────────
 
-with st.container(border=True, height=500):
+with st.container(border=True):
     st.subheader('Nota de humor por dia')
-    grefico_calendario(humor[['Data', 'value']], ano_2=2025, ano_3=2026)
+    grefico_calendario(humor[['Data', 'value']])

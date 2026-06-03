@@ -142,8 +142,8 @@ with st.container(border=True, height=450):
 
 # ── Calendário ─────────────────────────────────────────────────────────────────
 
-with st.container(border=True, height=600):
+with st.container(border=True):
     st.subheader('Atividades realizadas por dia')
     cal_data = df_filtrado[list(categorias)].reset_index().melt("Data").dropna(subset=['value'])
     cal_data = cal_data.groupby('Data')['value'].sum().reset_index()
-    grefico_calendario(cal_data, ano_2=2025, ano_3=2026)
+    grefico_calendario(cal_data)
