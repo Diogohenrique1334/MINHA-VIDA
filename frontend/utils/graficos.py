@@ -447,11 +447,13 @@ def barras_empilhadas_horizontais(raw_data=None, series_names=None, eixo=None, t
         "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
         "legend": {
             "data": series_names,
+            "top": 0,
+            "type": "scroll",
             "textStyle": {
                 "color": "#ffffff",
                 "fontSize": 11,
             }},
-        "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
+        "grid": {"left": "3%", "right": "4%", "bottom": "3%", "top": "15%", "containLabel": True},
         "xAxis": {"type": "category", "data": eixo},
         "yAxis": {"type": "value"},
         "series": raw_data,
