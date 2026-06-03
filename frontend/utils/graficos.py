@@ -518,8 +518,9 @@ def barras_drilldown(drilldown_data,categorias,dados_principais,tamanho ="300px"
         key="render_bar_drilldown",
     )
 
-    if result and result in drilldown_data and st.session_state.bar_drilldown_group != result:
-        st.session_state.bar_drilldown_group = result
+    group_id = result.get("groupId") if isinstance(result, dict) else result
+    if group_id and isinstance(group_id, str) and group_id in drilldown_data and st.session_state.bar_drilldown_group != group_id:
+        st.session_state.bar_drilldown_group = group_id
         st.rerun()
 
 def barras_simples(categorias,valores, tamanho = "300px"):
