@@ -1,8 +1,26 @@
+# Python
 __pycache__/
 *.pyc
+*.ipynb
+.ipynb_checkpoints/
+
+# Ambientes virtuais
+venv/
+myenv/
+.venv/
+env/
+
+# Segredos e banco local
 .env
 banco.db
+
+# Dados pessoais (planilhas de hábitos)
+*.xlsx
+
+# IDE
+.vscode/
+.idea/
+
+# Scripts legados (não versionar)
 alimentar_banco_planilha.py
 limpar_banco.py
-*.ipynb
-myenv/
