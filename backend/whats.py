@@ -3,7 +3,7 @@ import requests
 import json
 import datetime
 from fastapi import FastAPI, Request, HTTPException
-from sqlalchemy import func, cast, Date
+from sqlalchemy import func
 import traceback
 from dotenv import load_dotenv
 import os
@@ -31,6 +31,44 @@ def data_hoje_brasil():
 
 def data_ontem_brasil():
     return data_hoje_brasil() - datetime.timedelta(days=1)
+
+DIAS_SEMANA_PT = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
+
+def resolver_data(token):
+    """Resolve o token de dia que trafega nos payloads em um datetime.date.
+
+    Aceita as datas em formato ISO (AAAA-MM-DD) e mantém compatibilidade com
+    os tokens antigos 'hoje'/'ontem' para conversas iniciadas antes do deploy.
+    """
+    if token == 'hoje':
+        return data_hoje_brasil()
+    if token == 'ontem':
+        return data_ontem_brasil()
+    return datetime.date.fromisoformat(token)
+
+def rotulo_dia(data):
+    """Rótulo amigável para um datetime.date: 'hoje', 'ontem' ou 'em 05/06 (qua)'."""
+    if data == data_hoje_brasil():
+        return 'hoje'
+    if data == data_ontem_brasil():
+        return 'ontem'
+    return f"em {data.strftime('%d/%m')} ({DIAS_SEMANA_PT[data.weekday()]})"
+
+def parse_data_usuario(texto):
+    """Converte uma data digitada pelo usuário em datetime.date, ou None se inválida.
+
+    Aceita 05/06, 5/6, 05/06/2025, 05/06/25, 05-06. Ano omitido assume o ano atual.
+    """
+    texto = texto.strip()
+    for fmt in ('%d/%m/%Y', '%d/%m/%y', '%d/%m', '%d-%m-%Y', '%d-%m'):
+        try:
+            data = datetime.datetime.strptime(texto, fmt).date()
+        except ValueError:
+            continue
+        if fmt in ('%d/%m', '%d-%m'):
+            data = data.replace(year=data_hoje_brasil().year)
+        return data
+    return None
 
 def send_whatsapp_message(recipient_id, message_text):
     print(f"Tentando enviar '{message_text}' para {recipient_id}")
@@ -104,18 +142,39 @@ TOPICOS_TEXTO = {
     'nota_humor_fim': {'coluna': 'Nota_humor_fim_dia', 'texto': 'Para finalizar, qual sua nota de humor ao ir dormir {dia}? (de 0 a 10)', 'tipo': 'nota', 'titulo': 'Humor Fim'}
 }
 
-def send_top_level_menu(sender_phone):
-    texto = "Olá! Bem-vindo(a) ao seu diário. 😄\n\nPara qual dia você gostaria de registrar informações?"
-    botoes = [
-        {"title": "📅 Hoje", "payload": "escolher_dia_hoje"},
-        {"title": "📅 Ontem", "payload": "escolher_dia_ontem"}
-    ]
-    send_button_message(sender_phone, texto, botoes)
+# Colunas que o bot efetivamente registra — base para saber se um dia tem algo anotado.
+COLUNAS_RASTREADAS = [v['coluna'] for v in {**TOPICOS_SIM_NAO, **TOPICOS_TEXTO}.values()]
+
+def dia_tem_registro(registro):
+    """True se o dia tem ao menos um hábito ou métrica preenchido."""
+    return registro is not None and any(
+        getattr(registro, coluna) is not None for coluna in COLUNAS_RASTREADAS
+    )
+
+def send_seletor_de_dia(sender_phone, session, qtd_dias=8):
+    """Lista os últimos dias com status (✅ tem algo / ⬜️ vazio) + opção de digitar outra data."""
+    hoje = data_hoje_brasil()
+    rows = []
+    for i in range(qtd_dias):
+        dia = hoje - datetime.timedelta(days=i)
+        registro = buscar_registro(session, dia, sender_phone)
+        emoji = "✅" if dia_tem_registro(registro) else "⬜️"
+        title = f"{emoji} {dia.strftime('%d/%m')} ({DIAS_SEMANA_PT[dia.weekday()]})"
+        if i == 0:
+            description = "hoje"
+        elif i == 1:
+            description = "ontem"
+        else:
+            description = "registrado" if dia_tem_registro(registro) else "vazio"
+        rows.append({"id": f"escolher_dia_{dia.isoformat()}", "title": title[:24], "description": description[:72]})
+    rows.append({"id": "escolher_outra_data", "title": "📅 Outra data"})
+    sections = [{"title": "Últimos dias", "rows": rows}]
+    send_list_message(sender_phone, "Diário", "Para qual dia você gostaria de registrar?", "Escolher dia", sections)
 
 def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     topicos_dict = TOPICOS_SIM_NAO if category == 'habitos' else TOPICOS_TEXTO
     header_text = "Hábitos" if category == 'habitos' else "Métricas"
-    dia_texto = "hoje" if dia == "hoje" else "ontem"
+    dia_texto = rotulo_dia(resolver_data(dia))
     rows = []
     for key, value in topicos_dict.items():
         resposta = getattr(registro, value['coluna'], None)
@@ -147,20 +206,22 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     sections = [{"title": section_title, "rows": rows}]
     send_list_message(sender_phone, f"Diário - {dia_texto.capitalize()}", header_text, "Opções", sections)
 
-def get_registro_por_data(session, data, sender_phone):
-    registro = session.query(Minha_vida).filter(
+def buscar_registro(session, data, sender_phone):
+    """Busca (sem criar) o registro de um dia para um usuário. Retorna None se não existir."""
+    return session.query(Minha_vida).filter(
         func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == data,
         Minha_vida.user_phone_number == sender_phone
     ).first()
+
+def get_registro_por_data(session, data, sender_phone):
+    """Busca o registro do dia; cria uma linha vazia se ainda não existir."""
+    registro = buscar_registro(session, data, sender_phone)
     if not registro:
         data_inicio = FUSO_BRASIL.localize(datetime.datetime.combine(data, datetime.time(0, 0)))
         novo_registro = Minha_vida(data=data_inicio, user_phone_number=sender_phone)
         session.add(novo_registro)
         session.commit()
-        registro = session.query(Minha_vida).filter(
-            func.date(func.timezone('America/Sao_Paulo', Minha_vida.data)) == data,
-            Minha_vida.user_phone_number == sender_phone
-        ).first()
+        registro = buscar_registro(session, data, sender_phone)
     return registro
 
 @app.get("/")
@@ -187,18 +248,25 @@ async def handle_webhook(request: Request):
             sender_phone = message_info["from"]
             with pegar_sessao() as session:
                 if message_info["type"] == "text" and message_info["text"]["body"].lower().strip() in ["iniciar", "oi", "diario", "menu"]:
-                    send_top_level_menu(sender_phone)
+                    send_seletor_de_dia(sender_phone, session)
                     return {"status": "ok"}
 
                 elif message_info["type"] == "interactive":
                     interactive_type = message_info["interactive"]["type"]
                     payload = message_info["interactive"][interactive_type]["id"]
 
+                    if payload == 'escolher_outra_data':
+                        registro = get_registro_por_data(session, data_hoje_brasil(), sender_phone)
+                        registro.status_conversa = "aguardando_data_livre"
+                        session.commit()
+                        send_whatsapp_message(sender_phone, "Digite a data que você quer registrar (ex: 05/06 ou 05/06/2025):")
+                        return {"status": "ok"}
+
                     if payload.startswith('escolher_dia_'):
                         dia_escolhido = payload.replace('escolher_dia_', '')
-                        data_referencia = data_hoje_brasil() if dia_escolhido == 'hoje' else data_ontem_brasil()
+                        data_referencia = resolver_data(dia_escolhido)
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
-                        texto = f"Você selecionou {dia_escolhido}. O que você gostaria de registrar?"
+                        texto = f"Você selecionou {rotulo_dia(data_referencia)}. O que você gostaria de registrar?"
                         botoes = [
                             {"title": "💪 Registrar Hábitos", "payload": f"show_menu_habitos_{dia_escolhido}"},
                             {"title": "📊 Registrar Métricas", "payload": f"show_menu_metricas_{dia_escolhido}"}
@@ -210,10 +278,10 @@ async def handle_webhook(request: Request):
                         parts = payload.split('_')
                         category = parts[2] if len(parts) > 2 else 'principal'
                         dia_escolhido = parts[3] if len(parts) > 3 else 'hoje'
-                        data_referencia = data_hoje_brasil() if dia_escolhido == 'hoje' else data_ontem_brasil()
+                        data_referencia = resolver_data(dia_escolhido)
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
                         if category == 'principal':
-                            send_top_level_menu(sender_phone)
+                            send_seletor_de_dia(sender_phone, session)
                         else:
                             send_dynamic_menu(sender_phone, session, registro, category, dia_escolhido)
                         return {"status": "ok"}
@@ -225,7 +293,7 @@ async def handle_webhook(request: Request):
                         except ValueError:
                             topic_key = rest
                             dia_escolhido = 'hoje'
-                        data_referencia = data_hoje_brasil() if dia_escolhido == 'hoje' else data_ontem_brasil()
+                        data_referencia = resolver_data(dia_escolhido)
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
                         if topic_key in TOPICOS_SIM_NAO:
                             topic_info = TOPICOS_SIM_NAO[topic_key]
@@ -239,7 +307,7 @@ async def handle_webhook(request: Request):
                             send_dynamic_menu(sender_phone, session, registro, 'habitos', dia_escolhido)
                         elif topic_key in TOPICOS_TEXTO:
                             topic_info = TOPICOS_TEXTO[topic_key]
-                            texto_pergunta = topic_info['texto'].format(dia=dia_escolhido)
+                            texto_pergunta = topic_info['texto'].format(dia=rotulo_dia(data_referencia))
                             registro.status_conversa = f"aguardando_{topic_key}_{dia_escolhido}"
                             session.commit()
                             send_whatsapp_message(sender_phone, texto_pergunta)
@@ -253,6 +321,25 @@ async def handle_webhook(request: Request):
                     if registro and registro.status_conversa:
                         texto_usuario = message_info["text"]["body"]
                         status = registro.status_conversa
+                        if status == "aguardando_data_livre":
+                            registro.status_conversa = None
+                            session.commit()
+                            data_alvo = parse_data_usuario(texto_usuario)
+                            if data_alvo is None:
+                                send_whatsapp_message(sender_phone, "Não entendi a data. Tente no formato 05/06 ou 05/06/2025.")
+                                return {"status": "ok"}
+                            if data_alvo > data_hoje_brasil():
+                                send_whatsapp_message(sender_phone, "Essa data ainda não chegou. 😅 Escolha hoje ou um dia passado.")
+                                return {"status": "ok"}
+                            get_registro_por_data(session, data_alvo, sender_phone)
+                            dia_iso = data_alvo.isoformat()
+                            texto = f"Você selecionou {rotulo_dia(data_alvo)}. O que você gostaria de registrar?"
+                            botoes = [
+                                {"title": "💪 Registrar Hábitos", "payload": f"show_menu_habitos_{dia_iso}"},
+                                {"title": "📊 Registrar Métricas", "payload": f"show_menu_metricas_{dia_iso}"}
+                            ]
+                            send_button_message(sender_phone, texto, botoes)
+                            return {"status": "ok"}
                         if status.startswith("aguardando_"):
                             rest = status[len("aguardando_"):]
                             try:
@@ -263,7 +350,7 @@ async def handle_webhook(request: Request):
                         else:
                             topic_key = None
                             dia_escolhido = 'hoje'
-                        data_referencia = data_hoje_brasil() if dia_escolhido == 'hoje' else data_ontem_brasil()
+                        data_referencia = resolver_data(dia_escolhido)
                         registro = get_registro_por_data(session, data_referencia, sender_phone)
                         if topic_key in TOPICOS_TEXTO:
                             topic_info = TOPICOS_TEXTO[topic_key]
@@ -291,7 +378,7 @@ async def handle_webhook(request: Request):
                                 send_dynamic_menu(sender_phone, session, registro, 'metricas', dia_escolhido)
                             except ValueError:
                                 send_whatsapp_message(sender_phone, "Resposta inválida. Por favor, tente novamente.")
-                                send_whatsapp_message(sender_phone, topic_info['texto'].format(dia=dia_escolhido))
+                                send_whatsapp_message(sender_phone, topic_info['texto'].format(dia=rotulo_dia(data_referencia)))
                         return {"status": "ok"}
     except Exception as e:
         print(f"!!!!!!!!!! ERRO CRÍTICO NO WEBHOOK !!!!!!!!!!!")
