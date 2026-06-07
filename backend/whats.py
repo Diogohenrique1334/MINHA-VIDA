@@ -206,6 +206,20 @@ def send_dynamic_menu(sender_phone, session, registro, category, dia="hoje"):
     sections = [{"title": section_title, "rows": rows}]
     send_list_message(sender_phone, f"Diário - {dia_texto.capitalize()}", header_text, "Opções", sections)
 
+def limpar_status_conversa(session, sender_phone):
+    """Zera o status_conversa de todos os registros do usuário.
+
+    Garante uma única conversa ativa por vez: como o status é guardado por dia,
+    sem isso vários dias podem ficar pendentes e o handler de texto (que busca por
+    data desc) acabaria gravando a resposta no dia errado.
+    """
+    pendentes = session.query(Minha_vida).filter(
+        Minha_vida.user_phone_number == sender_phone,
+        Minha_vida.status_conversa.isnot(None)
+    ).all()
+    for registro in pendentes:
+        registro.status_conversa = None
+
 def buscar_registro(session, data, sender_phone):
     """Busca (sem criar) o registro de um dia para um usuário. Retorna None se não existir."""
     return session.query(Minha_vida).filter(
@@ -257,6 +271,7 @@ async def handle_webhook(request: Request):
 
                     if payload == 'escolher_outra_data':
                         registro = get_registro_por_data(session, data_hoje_brasil(), sender_phone)
+                        limpar_status_conversa(session, sender_phone)
                         registro.status_conversa = "aguardando_data_livre"
                         session.commit()
                         send_whatsapp_message(sender_phone, "Digite a data que você quer registrar (ex: 05/06 ou 05/06/2025):")
@@ -308,6 +323,7 @@ async def handle_webhook(request: Request):
                         elif topic_key in TOPICOS_TEXTO:
                             topic_info = TOPICOS_TEXTO[topic_key]
                             texto_pergunta = topic_info['texto'].format(dia=rotulo_dia(data_referencia))
+                            limpar_status_conversa(session, sender_phone)
                             registro.status_conversa = f"aguardando_{topic_key}_{dia_escolhido}"
                             session.commit()
                             send_whatsapp_message(sender_phone, texto_pergunta)
