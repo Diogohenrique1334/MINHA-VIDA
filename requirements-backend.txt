@@ -1,0 +1,12 @@
+# Dependências apenas do backend (FastAPI + bot do WhatsApp + migrações).
+# O requirements.txt da raiz (usado pelo Render/Streamlit) inclui também as
+# libs do frontend (streamlit, plotly, scikit-learn, etc). Manter este arquivo
+# enxuto deixa a imagem Docker do backend pequena e o build rápido.
+fastapi==0.128.8
+uvicorn==0.39.0
+SQLAlchemy==2.0.41
+psycopg2-binary==2.9.12
+alembic==1.16.5
+requests==2.32.4
+pytz==2025.2
+python-dotenv==1.1.0

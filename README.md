@@ -42,7 +42,10 @@ Minha_vida/
 ├── alembic/                  # Migrações do banco
 ├── Procfile                  # uvicorn backend.whats:app
 ├── build.sh                  # pip install + alembic upgrade head
-└── requirements.txt
+├── Dockerfile                # Imagem do backend
+├── docker-compose.yml        # Backend + Postgres local (dev/portfólio)
+├── requirements.txt          # Deps completas (backend + frontend) — usado no deploy
+└── requirements-backend.txt  # Deps só do backend — usado na imagem Docker
 ```
 
 ---
@@ -86,6 +89,26 @@ uvicorn backend.whats:app --host 0.0.0.0 --port 8000
 
 # Frontend
 streamlit run frontend/Habitos.py
+```
+
+---
+
+## Rodar com Docker
+
+O backend sobe junto com um **Postgres local descartável** via Docker Compose — um
+ambiente isolado, sem nenhum acesso ao banco ou ao WhatsApp de produção.
+
+```bash
+docker compose up --build
+```
+
+- API disponível em `http://localhost:8000` (`GET /` → `{"status": "API online"}`)
+- As migrações Alembic rodam automaticamente ao subir o container
+- As credenciais do WhatsApp ficam com valores dummy (o bot não envia mensagens reais)
+
+```bash
+docker compose down      # para os containers
+docker compose down -v   # para e apaga o volume do Postgres local
 ```
 
 ---

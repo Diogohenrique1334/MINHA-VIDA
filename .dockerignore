@@ -1,0 +1,25 @@
+# Ambientes virtuais e caches
+venv/
+myenv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Git e editores
+.git/
+.gitignore
+.vscode/
+.ipynb_checkpoints/
+*.code-workspace
+
+# Frontend (não vai na imagem do backend)
+frontend/
+
+# Segredos e dados locais
+.env
+banco.db
+*.xlsx
+
+# Docs
+README.md

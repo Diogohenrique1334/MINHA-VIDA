@@ -1,0 +1,41 @@
+# Ambiente local/portfólio: sobe o backend + um Postgres descartável.
+# NÃO afeta a produção (Render + Neon) — é totalmente isolado.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: minha_vida
+      POSTGRES_PASSWORD: minha_vida
+      POSTGRES_DB: minha_vida
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minha_vida"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    environment:
+      # Banco local do compose (host "db" = nome do serviço acima).
+      DATABASE_URL: postgresql://minha_vida:minha_vida@db:5432/minha_vida
+      PORT: 8000
+      # Credenciais do WhatsApp: valores dummy fixos no local — o bot NÃO envia
+      # de verdade. Propositalmente sem ${...} para que o .env de produção (que o
+      # compose carrega automaticamente) nunca vaze segredos reais pro container.
+      # Para testar envio real, use um env_file dedicado (ex: env_file: .env.docker).
+      API_VERSION: "v20.0"
+      PHONE_NUMBER_ID: "local"
+      ACCESS_TOKEN: "local"
+      VERIFY_TOKEN: "local"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
