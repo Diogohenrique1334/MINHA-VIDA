@@ -6,16 +6,11 @@ from utils.graficos import barras_empilhadas_horizontais, grefico_calendario
 from utils.transformadores import serie_temporal_dia_semana_complexo, serei_semana_mes_complexo, serei_mes_ano_options
 from utils.tratamente_dados import preparar_df
 import streamlit as st
-import os
-from dotenv import load_dotenv
-from sqlalchemy import create_engine
-
-load_dotenv()
+from utils.dados import carregar_dados as _carregar_dados
 
 @st.cache_data
 def carregar_dados():
-    engine = create_engine(os.getenv("DATABASE_URL"))
-    return pd.read_sql_table('minha_vida', engine, index_col='id')
+    return _carregar_dados()
 
 @st.cache_data
 def dados_tratados(_df):

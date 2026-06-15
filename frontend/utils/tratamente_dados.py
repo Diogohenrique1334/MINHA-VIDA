@@ -12,21 +12,14 @@ def preparar_df(df):
 
     usuario = {'5511959536031':"Diogo",'5511991422452':"Michele"}
 
+    # Apenas as métricas precisam ser renomeadas — os hábitos já chegam com o
+    # nome de exibição (vêm de habitos.nome no novo modelo relacional).
     Colunas_tratadas = {'data':'Data',
                         'nota_humor':'Nota do humor',
-                        'Exercício_aerobico':'Exercício aeróbico',
-                        'Alimentação_saudavel':'Alimentação saudável',
-                        'Consumo_de_agua':'Consumo de água',
-                        'Atividade_sexual':'Atividade sexual',
                         'Nota_humor_fim_dia':'Nota do humor fim do dia',
-
                         'data_hora_acordei':'Hora que eu acordei',
                         'data_hora_dormi':'Horario que eu fui dormir'
                     }
-
-    Hiper_categoria = {'secreto':'Lazer', 'Estudar':'Evolução pessoal', 'Leitura':'Evolução pessoal','Exercício aeróbico':'Saúde do corpo',
-    'Alimentação saudável':'Saúde do corpo', 'Consumo de água':'Saúde do corpo','Atenção plena':'Saúde da mente', 'Academia':'Saúde do corpo',
-    'Atividade sexual':'Lazer'}
 
     # Garante que a coluna 'data' é do tipo datetime e ajusta para o fuso horário correto
     df['data'] = pd.to_datetime(df['data'].dt.date)
@@ -36,7 +29,7 @@ def preparar_df(df):
     df['mes'] = df["data"].dt.strftime('%m - %Y')
     df['mes_ordenacao'] = pd.to_datetime(df['data']).dt.to_period('M')
     df['mes'] = pd.Categorical(df['mes'], categories=df.sort_values('mes_ordenacao')['mes'].unique(), ordered=True)
-    df = df.drop(columns=['mes_ordenacao','Diario_e_fixacao','Atencao_plena','status_conversa']).rename(columns = Colunas_tratadas)
+    df = df.drop(columns=['mes_ordenacao','Diario_e_fixacao','Atencao_plena','status_conversa'], errors='ignore').rename(columns = Colunas_tratadas)
     df['Dia da semana'] = pd.Categorical(df['Dia da semana'], categories=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'], ordered=True)
     df['user_phone_number'] = df['user_phone_number'].map(usuario).astype('category')
 

@@ -7,17 +7,16 @@ from utils.graficos import liquid_fill, barras_simples, barras_drilldown, barras
 from utils.transformadores import serei_semana_mes_complexo, dados_grafico_barras, get_delta, serie_temporal_dia_semana_complexo, serei_mes_ano_options, top_10_categorias
 from utils.graficos import grefico_calendario
 import streamlit as st
-import os
 import numpy as np
-from dotenv import load_dotenv
-from sqlalchemy import create_engine
-
-load_dotenv()
+from utils.dados import carregar_dados as _carregar_dados, carregar_habitos_meta
 
 @st.cache_data
 def carregar_dados():
-    engine = create_engine(os.getenv("DATABASE_URL"))
-    return pd.read_sql_table('minha_vida', engine, index_col='id')
+    return _carregar_dados()
+
+@st.cache_data
+def carregar_meta():
+    return carregar_habitos_meta()
 
 @st.cache_data
 def dados_tratados(_df):
@@ -26,17 +25,11 @@ def dados_tratados(_df):
 df = dados_tratados(carregar_dados())
 df = df[df.user_phone_number == 'Diogo'].reset_index(drop=True)
 
-categorias1 = df[[
-    'secreto', 'Estudar', 'Leitura', 'Exercício aeróbico',
-    'Alimentação saudável', 'Consumo de água', 'Academia', 'Atividade sexual'
-]].melt()['variable'].unique()
-
-Hiper_categoria = {
-    'secreto': 'Lazer', 'Estudar': 'Evolução pessoal', 'Leitura': 'Evolução pessoal',
-    'Exercício aeróbico': 'Saúde do corpo', 'Alimentação saudável': 'Saúde do corpo',
-    'Consumo de água': 'Saúde do corpo', 'Atenção plena': 'Saúde da mente',
-    'Academia': 'Saúde do corpo', 'Atividade sexual': 'Lazer'
-}
+# Categorias e hipercategorias agora vêm do banco (tabela habitos), não hardcoded.
+meta = carregar_meta()
+meta_diogo = meta[meta.user_phone_number == '5511959536031'].sort_values('ordem')
+Hiper_categoria = dict(zip(meta_diogo['nome'], meta_diogo['categoria']))
+categorias1 = np.array([nome for nome in meta_diogo['nome'] if nome in df.columns])
 
 imagem = Image.open(Path(__file__).parent / "foto_diogo.jpg")
 
