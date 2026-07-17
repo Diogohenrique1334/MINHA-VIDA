@@ -13,3 +13,5 @@ requests
 fastapi
 uvicorn
 pytz
+# Biblioteca pessoal (fonte única de graficos/transformadores)
+baltazar @ git+https://github.com/Diogohenrique1334/baltazar.git
