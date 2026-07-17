@@ -82,12 +82,14 @@ def _fmt_valor(v):
     return f"{v:.0%}" if abs(v) <= 1.5 else f"{v:.1f}"
 
 
-def _sparkline_svg(serie, cor=ACCENT, w=120, h=34, rotulo="Semanal"):
+def _sparkline_svg(serie, cor=ACCENT, w=120, h=34, rotulo="Semanal", janela=12):
     """Mini timeline (área) como SVG inline, para caber dentro do box de KPI.
 
     serie: iterável de números (ex.: aderência/humor semanal). NaN é ignorado.
-    cor: cor da linha/ponto/degradê (default verde; o box escolhe pela tendência).
+    cor: cor da linha/ponto (default verde; o box escolhe pela tendência).
     rotulo: prefixo do tooltip nativo (<title>) exibido ao passar o mouse.
+    janela: nº de semanas mais recentes a exibir (declutter). None = tudo.
+    Desenha ainda a linha de média (tracejada) da janela como referência.
     Retorna '' se houver menos de 2 pontos válidos.
     """
     pts = []
@@ -98,14 +100,23 @@ def _sparkline_svg(serie, cor=ACCENT, w=120, h=34, rotulo="Semanal"):
             continue
         if f == f:  # descarta NaN
             pts.append(f)
+    total = len(pts)
+    if janela:
+        pts = pts[-janela:]  # só as últimas N semanas
     if len(pts) < 2:
         return ""
 
     lo, hi = min(pts), max(pts)
     rng = (hi - lo) or 1.0
     n = len(pts)
+    media = sum(pts) / n
+
+    def _y(v):
+        return h - ((v - lo) / rng) * (h - 6) - 3
+
     xs = [i / (n - 1) * w for i in range(n)]
-    ys = [h - ((v - lo) / rng) * (h - 6) - 3 for v in pts]
+    ys = [_y(v) for v in pts]
+    my = _y(media)  # y da linha de média
 
     linha = " ".join(f"{x:.1f},{y:.1f}" for x, y in zip(xs, ys))
     area = f"0,{h} " + linha + f" {w},{h}"
@@ -113,18 +124,22 @@ def _sparkline_svg(serie, cor=ACCENT, w=120, h=34, rotulo="Semanal"):
     lx, ly = xs[-1], ys[-1]  # ponto da última semana (destacado)
 
     # Tooltip nativo do navegador (o Streamlit não roda JS, mas honra <title>).
+    escopo = f"{n} de {total} sem." if (janela and total > n) else f"{n} semanas"
     resumo = (
         f"{rotulo} - atual: {_fmt_valor(pts[-1])} · "
-        f"média: {_fmt_valor(sum(pts) / n)} · "
-        f"mín–máx: {_fmt_valor(lo)}–{_fmt_valor(hi)} · {n} semanas"
+        f"média: {_fmt_valor(media)} · "
+        f"mín–máx: {_fmt_valor(lo)}–{_fmt_valor(hi)} · {escopo}"
     )
 
     # Preenchimento chapado (não degradê) - url(#id)/<defs> costuma ser removido
     # pelo sanitizador de HTML do Streamlit, o que deixaria a área invisível.
+    # Ordem: área → linha de média (referência) → série → ponto atual.
     return (
         f'<svg class="mv-spark" viewBox="0 0 {w} {h}" preserveAspectRatio="none">'
         f'<title>{resumo}</title>'
         f'<polygon points="{area}" fill="{cor}" fill-opacity="0.16"/>'
+        f'<line x1="0" y1="{my:.1f}" x2="{w}" y2="{my:.1f}" stroke="#6b7280" '
+        f'stroke-width="0.8" stroke-dasharray="3 3"/>'
         f'<polyline points="{linha}" fill="none" stroke="{cor}" '
         f'stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
         f'<circle cx="{lx:.1f}" cy="{ly:.1f}" r="2.4" fill="{cor}"/>'
