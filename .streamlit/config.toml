@@ -1,0 +1,8 @@
+# Tema dark fixo — não depende do toggle do usuário (padrão dos projetos do Diogo).
+[theme]
+base = "dark"
+primaryColor = "#18990b"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#1a1a2e"
+textColor = "#f0f0f0"
+font = "sans serif"
